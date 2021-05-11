@@ -301,7 +301,7 @@ contract UnboundUniswapV3Aggregator {
             totalValueInStable = totalValueInStable.add(liquidityNFTs[_strategyId][_liquidityId].pendingDeposits[i]);
             totalStablecoin = totalStablecoin.add(liquidityNFTs[_strategyId][_liquidityId].pendingDeposits[i]);
         }
-
+        liquidityNFTs[_strategyId][_liquidityId].pendingIndex = 0;
         // totalValueInStable should now include pending deposits
         
         // Swap
