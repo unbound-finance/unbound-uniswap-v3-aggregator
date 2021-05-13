@@ -29,7 +29,7 @@ interface UnboundStrategy {
     function fee() public view returns (uint256);
 }
 
-contract UnboundUniswapV3Aggregator {
+contract UnboundUniswapV3Aggregator2 {
     using SafeMath for uint256;
 
     // store deposits
@@ -40,7 +40,7 @@ contract UnboundUniswapV3Aggregator {
         IERC20 stablecoin = IERC20(strategy.stablecoin());
 
         // check if the user has sufficient balance
-        require(stablecoin.balanceOf(msg.sender) > 0, "invalid amount");
+        require(stablecoin.balanceOf(msg.sender) > _amount, "invalid amount");
 
         // transfer the stablecoin to the user
         stablecoin.transferFrom(msg.sender, address(this), _amount);
