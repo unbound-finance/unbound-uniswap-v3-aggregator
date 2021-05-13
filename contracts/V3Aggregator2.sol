@@ -35,6 +35,13 @@ contract UnboundUniswapV3Aggregator2 {
     // store deposits
     mapping(address => uint256) deposits;
 
+    // store stake points
+    // user => strategy address => points
+    mapping(address => mapping(address => uint256)) userStakePoints;
+
+    // strategy => totalPoints
+    mapping(address => uint256) totalStakePointsOfStrategy;
+
     function addLiquidity(address _strategy, uint256 _amount) external {
         UnboundStrategy strategy = UnboundStrategy(_strategy);
         IERC20 stablecoin = IERC20(strategy.stablecoin());
@@ -42,15 +49,29 @@ contract UnboundUniswapV3Aggregator2 {
         // check if the user has sufficient balance
         require(stablecoin.balanceOf(msg.sender) > _amount, "invalid amount");
 
-        // transfer the stablecoin to the user
+        // transfer the stablecoin from the user
         stablecoin.transferFrom(msg.sender, address(this), _amount);
 
         // update deposits and unused mappings
         deposits[msg.sender] = deposits[msg.sender].add(_amount);
+
+        // we need to track total value of liquidity within the strategy, then we can calculate amount of stake points
+
+        // stake points to mint = _amount * totalStakePointsOfStrategy[_strategy] / total Value of Liquidity
+
+        // add the liquidity after issuing stake points
     }
 
-    function removeLiquidity() external {
-        
+    function removeLiquidity(address _strategy, uint256 _stakeToWithdraw) external {
+        UnboundStrategy strategy = UnboundStrategy(_strategy);
+        IERC20 stablecoin = IERC20(strategy.stablecoin()); 
+
+        uint256 valueToReturn = _stakeToWithdraw.mul(totalValue).div(totalStakePointsOfStrategy[_strategy]);
+
+        // remove amount of liquidity equal to valueToReturn
+
+        userStakePoints[_strategy][msg.sender] = userStakePoints[_strategy][msg.sender].sub(_stakeToWithdraw);
+        totalStakePointsOfStrategy[_strategy] = totalStakePointsOfStrategy[_strategy].sub(_stakeToWithdraw);
     }
 
     function rebalance(address _strategy) external {
@@ -58,7 +79,7 @@ contract UnboundUniswapV3Aggregator2 {
         IERC20 stablecoin = IERC20(strategy.stablecoin());
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
 
-        uint256 burnLiquidityAmount = 0;
+        uint256 burnLiquidityAmount = 0; // what does this value do?
         burnLiquidity(strategy.tickLower(), strategy.tickUpper(), liquidity);
 
         uint256 totalStablecoin = stablecoin.balanceOf(address(this));
@@ -67,15 +88,15 @@ contract UnboundUniswapV3Aggregator2 {
         // Formula to calculate Dai required to buy weth using ranges
         // TODO: might need to normalise
         uint256 buyPrice =
-            sqrt(currentPrice).mul(
+            sqrt(currentPrice).mul(  // why do we multiply the sqrt by the sqrt here?
                 sqrt(currentPrice).sub(sqrt(strategy.range0())).div(
-                    uint256(1).sub(sqrt(currentPrice.div(strategy.range1())))
+                    uint256(1).sub(sqrt(currentPrice.div(strategy.range1()))) // isn't this going to always revert unless root(currentprice/range1) = 0?
                 )
             );
 
         // calculate number of other tokens needs to be swapped with the current stablecoin pool
         uint256 swapAmount =
-            totalStablecoin.div(uint256(currentPrice).add(buyPrice));
+            totalStablecoin.div(uint256(currentPrice).add(buyPrice));  // not sure what this line does...
 
         // true if swap is token0 to token1 and false if swap is token1 to token0
         bool zeroForOne =
@@ -126,8 +147,8 @@ contract UnboundUniswapV3Aggregator2 {
             (uint256 owed0, uint256 owed1) = pool.burn(tickLower, tickUpper, liquidity);
 
             // Collect amount owed
-            uint128 collect0 = type(uint128).max;
-            uint128 collect1 = type(uint128).max;
+            uint128 collect0 = type(uint128).max;  // no idea what these lines do...
+            uint128 collect1 = type(uint128).max;  // where is the type() function? Looks like there is nothing updating these numbers
             if (collect0 > 0 || collect1 > 0) {
                 (amount0, amount1) = pool.collect(address(this), tickLower, tickUpper, collect0, collect1);
             }
