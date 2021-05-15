@@ -59,7 +59,7 @@ library LiquidityAmounts {
         uint160 sqrtRatioBX96,
         uint256 amount0,
         uint256 amount1
-    ) internal pure returns (uint128 liquidity) {
+    ) public view returns (uint128 liquidity) {
         if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
 
         if (sqrtRatioX96 <= sqrtRatioAX96) {
@@ -122,7 +122,7 @@ library LiquidityAmounts {
         uint160 sqrtRatioAX96,
         uint160 sqrtRatioBX96,
         uint128 liquidity
-    ) internal pure returns (uint256 amount0, uint256 amount1) {
+    ) external pure returns (uint256 amount0, uint256 amount1) {
         if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
 
         if (sqrtRatioX96 <= sqrtRatioAX96) {

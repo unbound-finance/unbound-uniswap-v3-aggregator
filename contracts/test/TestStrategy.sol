@@ -27,7 +27,7 @@ contract TestStrategy {
         int24 _tickUpper,
         address _pool,
         address _stablecoin,
-        address _fee
+        uint256 _fee
     ) {
         range0 = _range0;
         range1 = _range1;
