@@ -37,6 +37,12 @@ contract TestStrategy {
         stablecoin = _stablecoin;
     }
 
+
+    function changeTicks(int24 _newTickLower, int24 _newTickUpper) external{
+        tickLower = _newTickLower;
+        tickUpper = _newTickUpper;
+    }
+
     function changeRange0(uint256 _newRange) public {
         range0 = _newRange;
     }
