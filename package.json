@@ -16,7 +16,7 @@
     "@openzeppelin/test-helpers": "^0.5.10",
     "@uniswap/v3-periphery": "^1.0.0",
     "bignumber.js": "^9.0.1",
-    "dotenv": "^8.2.0",
+    "dotenv": "^9.0.2",
     "eslint": "^7.20.0"
   }
 }

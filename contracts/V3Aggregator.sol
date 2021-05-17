@@ -44,6 +44,20 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
     mapping(address => Strategy) public strategies;
 
+    // to update protocol fees
+    address public feeSetter;
+
+    // to receive the fees
+    address public feeTo;
+
+    // protocol fees, 1e8 is 100%
+    uint256 public PROTOCOL_FEE;
+
+    constructor(address _feeSetter) {
+        feeSetter = _feeSetter;
+        feeTo = address(0);
+    }
+
     /*
      * @notice Add liquidity to specific strategy
      * @param _strategy Address of the strategy
@@ -83,9 +97,6 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
         (amount0, amount1) = mintLiquidity(_strategy, liquidity, false);
 
-        console.log("mint0", amount0);
-        console.log("mint1", amount1);
-
         uint128 liquidityAfter =
             getCurrentLiquidity(
                 strategy.pool(),
@@ -95,12 +106,22 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
         // calculate shares
         // TODO: Replace liquidity with liquidityBefore
-        share = uint256(liquidityAfter).sub(liquidity).mul(totalShare).div(
-            liquidity
-        );
+        share = uint256(liquidityAfter)
+            .sub(liquidity)
+            .mul(totalShare)
+            .div(liquidity)
+            .add(1000);
 
-        // update shares w.r.t. strategy
-        issueShare(_strategy, share.add(1000));
+        if (feeTo != address(0)) {
+            uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
+            // issue fee
+            issueShare(_strategy, fee, feeTo);
+            // issue shares
+            issueShare(_strategy, share.sub(fee), msg.sender);
+        } else {
+            // update shares w.r.t. strategy
+            issueShare(_strategy, share, msg.sender);
+        }
 
         // price slippage check
         require(
@@ -108,7 +129,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
             "Aggregator: Slippage"
         );
 
-        // TODO: Add protocol fees
+        updateStrategyData(_strategy);
     }
 
     /*
@@ -199,18 +220,6 @@ contract V3Aggregator is IUniswapV3MintCallback {
         // burn shares of the user
         burnShare(_strategy, _shares);
 
-        console.log("collect0", collect0);
-        console.log("collect1", collect1);
-
-        console.log(
-            "token0 balance: ",
-            IERC20(pool.token0()).balanceOf(address(this))
-        );
-        console.log(
-            "token1 balance: ",
-            IERC20(pool.token1()).balanceOf(address(this))
-        );
-
         // transfer the tokens back
         if (amount0Real > 0) {
             IERC20(pool.token0()).transfer(msg.sender, amount0Real);
@@ -224,18 +233,21 @@ contract V3Aggregator is IUniswapV3MintCallback {
      * @notice Rebalances the pool to new ranges
      * @param _strategy Address of the strategy
      */
-    function rebalance(
-        address _strategy,
-        int24 _oldTickLower,
-        int24 _oldTickUpper
-    ) external returns (uint256 amount0, uint256 amount1) {
+    function rebalance(address _strategy)
+        external
+        returns (uint256 amount0, uint256 amount1)
+    {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-        // Strategy storage newStrategy = strategies[_strategy];
+        Strategy storage oldStrategy = strategies[_strategy];
 
         // // TODO: Store past liquidity
         uint128 oldLiquidity =
-            getCurrentLiquidity(strategy.pool(), _oldTickLower, _oldTickUpper);
+            getCurrentLiquidity(
+                strategy.pool(),
+                oldStrategy.tickLower,
+                oldStrategy.tickUpper
+            );
 
         // if (oldLiquidity > 0) {
         int24 tickLower = strategy.tickLower();
@@ -243,37 +255,31 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
         // burn liquidity
         (uint256 owed0, uint256 owed1) =
-            pool.burn(_oldTickLower, _oldTickUpper, oldLiquidity);
+            pool.burn(
+                oldStrategy.tickLower,
+                oldStrategy.tickUpper,
+                oldLiquidity
+            );
 
         // collect fees
         (uint128 collect0, uint128 collect1) =
             pool.collect(
                 address(this),
-                _oldTickLower,
-                _oldTickUpper,
+                oldStrategy.tickLower,
+                oldStrategy.tickUpper,
                 type(uint128).max,
                 type(uint128).max
             );
 
-        console.log("collect0", collect0);
-        console.log("collect1", collect1);
+        // calculate current liquidity
+        uint128 liquidity =
+            getLiquidityForAmounts(_strategy, collect0, collect1);
 
-        // // mint liquidity
-        // uint128 liquidity =
-        //     getCurrentLiquidity(
-        //         strategy.pool(),
-        //         strategy.tickLower(),
-        //         strategy.tickUpper()
-        //     );
-
-        uint128 liquidity = getLiquidityForAmounts(_strategy, collect0, collect1);
-
+        // mint liquidity
         mintLiquidity(_strategy, liquidity, true);
 
-        // // store current ticks
-        // newStrategy.tickLower = strategy.tickLower();
-        // newStrategy.tickUpper = strategy.tickUpper();
-        // }
+        // update strategy
+        updateStrategyData(_strategy);
     }
 
     /// @dev Callback for Uniswap V3 pool.
@@ -322,12 +328,15 @@ contract V3Aggregator is IUniswapV3MintCallback {
      * @notice Updates the shares of the user
      * @param _strategy Address of the strategy
      * @param _shares amount of shares user wants to burn
+     * @param _to address where shares should be issued
      */
-    function issueShare(address _strategy, uint256 _shares) internal {
+    function issueShare(
+        address _strategy,
+        uint256 _shares,
+        address _to
+    ) internal {
         // update shares
-        shares[_strategy][msg.sender] = shares[_strategy][msg.sender].add(
-            uint256(_shares)
-        );
+        shares[_strategy][_to] = shares[_strategy][_to].add(uint256(_shares));
         // update total shares
         totalShares[_strategy] = totalShares[_strategy].add(_shares);
     }
@@ -367,9 +376,6 @@ contract V3Aggregator is IUniswapV3MintCallback {
             TickMath.getSqrtRatioAtTick(strategy.tickLower());
         uint160 sqrtRatioBX96 =
             TickMath.getSqrtRatioAtTick(strategy.tickUpper());
-
-        console.log("sqrtRatioAX96", sqrtRatioAX96);
-        console.log("sqrtRatioBX96", sqrtRatioBX96);
 
         // calculate liquidity needs to be added
         liquidity = LiquidityAmounts.getLiquidityForAmounts(
@@ -425,5 +431,39 @@ contract V3Aggregator is IUniswapV3MintCallback {
         (liquidity, , , , ) = pool.positions(
             PositionKey.compute(address(this), _tickLower, _tickUpper)
         );
+    }
+
+    /*
+     * @dev Updates strategy data for future use
+     * @param _stategy Address of the strategy
+     */
+    function updateStrategyData(address _strategy) internal {
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        Strategy storage newStrategy = strategies[_strategy];
+        if (
+            newStrategy.tickLower != strategy.tickLower() &&
+            newStrategy.tickUpper != strategy.tickUpper()
+        ) {
+            newStrategy.tickLower = strategy.tickLower();
+            newStrategy.tickUpper = strategy.tickUpper();
+        }
+    }
+
+    /*
+     * @dev Change the fee setter's address
+     * @param _feeSetter New feeSetter address
+     */
+    function changeFeeSetter(address _feeSetter) external {
+        require(msg.sender == _feeSetter);
+        feeSetter = _feeSetter;
+    }
+
+    /*
+     * @dev Change fee receiver
+     * @param _feeTo New fee receiver
+     */
+    function changeFeeTo(address _feeTo) external {
+        require(msg.sender == feeSetter);
+        feeTo = _feeTo;
     }
 }

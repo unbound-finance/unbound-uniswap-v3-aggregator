@@ -132,6 +132,34 @@ describe("V3Aggregator", function () {
     expect(share).to.equal(1000);
   });
 
+  it("Should issue right amount of shares", async function () {
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
+
+    const bal0 = await testToken0.balanceOf(pool.address);
+    const bal1 = await testToken1.balanceOf(pool.address);
+    const share = await v3Aggregator.shares(strategy.address, owner.address);
+    const slot0 = await pool.slot0();
+
+    console.log({
+      sqrtPriceX96: slot0.sqrtPriceX96.toString(),
+      bal0: bal0.toString(),
+      bal1: bal1.toString(),
+      share: share.toString(),
+    });
+
+    expect(share).to.equal(1000);
+  });
+
+
   it("Should remove the liquidity", async function () {
     // await testToken0.approve(v3Aggregator.address, amountA);
     // await testToken1.approve(v3Aggregator.address, amountB);
