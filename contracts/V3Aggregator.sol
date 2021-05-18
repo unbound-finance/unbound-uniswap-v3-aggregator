@@ -289,7 +289,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
         bytes calldata data
     ) external override {
         MintCallbackData memory decoded = abi.decode(data, (MintCallbackData));
-
+        
         // check if the callback is received from Uniswap V3 Pool
         require(msg.sender == address(decoded.pool));
 

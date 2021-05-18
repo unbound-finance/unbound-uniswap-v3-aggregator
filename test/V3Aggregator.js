@@ -1,4 +1,4 @@
-const { expect } = require("chai");
+const { expect, assert } = require("chai");
 
 const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
@@ -42,8 +42,8 @@ beforeEach(async function () {
   const TestStrategy = await ethers.getContractFactory("TestStrategy");
   const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
 
-  v3Aggregator = await V3Aggregator.deploy();
-
+  v3Aggregator = await V3Aggregator.deploy(owner.address);
+  
   // deployments
   testToken0 = await TestToken.deploy(
     "Test Token 0",
@@ -104,6 +104,18 @@ beforeEach(async function () {
   await pool.initialize(sqrtPriceX96);
 });
 
+describe("state variables", () => {
+  it("totalShare", async () => {
+    const totalShare = await v3Aggregator.totalShare();
+    assert.equal(totalShare.toString(), "0", "wrong total shares");
+  })
+
+  it("feeSetter", async () => {
+    const totalShare = await v3Aggregator.feeSetter();
+    assert.equal(totalShare, owner.address, "wrong feeSetter");
+  })
+})
+
 describe("V3Aggregator", function () {
   it("Should add right amount of successfully", async function () {
     await testToken0.approve(v3Aggregator.address, amountA);
@@ -116,6 +128,8 @@ describe("V3Aggregator", function () {
       "0",
       "0"
     );
+
+    // how do we check what the correct amounts to add from amountA and amountB are?
 
     const bal0 = await testToken0.balanceOf(pool.address);
     const bal1 = await testToken1.balanceOf(pool.address);
@@ -136,6 +150,14 @@ describe("V3Aggregator", function () {
     await testToken0.approve(v3Aggregator.address, amountA);
     await testToken1.approve(v3Aggregator.address, amountB);
     // add liquidity using aggregator contract
+    const bal0Before = await testToken0.balanceOf(pool.address);
+    const bal1Before = await testToken1.balanceOf(pool.address);
+    const shareBefore = await v3Aggregator.shares(strategy.address, owner.address);
+
+    assert.equal(shareBefore.toString(), "0", "wrong shares");
+    assert.equal(bal0Before.toString(), "0", "wrong bal0");
+    assert.equal(bal1Before.toString(), "0", "wrong bal1");
+
     await v3Aggregator.addLiquidity(
       strategy.address,
       amountA,
@@ -156,48 +178,57 @@ describe("V3Aggregator", function () {
       share: share.toString(),
     });
 
+    // not sure why bal0 is amountB - 2 ??
+    // assert.equal(bal0.toString(), bal0Before.add(BigNumber.from(amountB)).toString(), "wrong amountA")
+
     expect(share).to.equal(1000);
   });
 
 
   it("Should remove the liquidity", async function () {
-    // await testToken0.approve(v3Aggregator.address, amountA);
-    // await testToken1.approve(v3Aggregator.address, amountB);
-    // // add liquidity using aggregator contract
-    // await v3Aggregator.addLiquidity(
-    //   strategy.address,
-    //   amountA,
-    //   amountB,
-    //   "0",
-    //   "0"
-    // );
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
 
-    // const newTickLower = calculateTick(3200, 60);
-    // const newTickUpper = calculateTick(4200, 60);
+    const shareBefore = await v3Aggregator.shares(strategy.address, owner.address);
 
-    // await strategy.changeTicks(newTickLower, newTickUpper);
-    // await v3Aggregator.rebalance(strategy.address, tickLower, tickUpper);
+    const newTickLower = calculateTick(3200, 60);
+    const newTickUpper = calculateTick(4200, 60);
 
-    // const bal0 = await testToken0.balanceOf(pool.address);
-    // const bal1 = await testToken1.balanceOf(pool.address);
-    // const share = await v3Aggregator.shares(strategy.address, owner.address);
-    // console.log({
-    //   bal0: bal0.toString(),
-    //   bal1: bal1.toString(),
-    //   share: share.toString(),
-    // });
+    await strategy.changeTicks(newTickLower, newTickUpper);
+    await v3Aggregator.rebalance(strategy.address);
 
-    // await v3Aggregator.removeLiquidity(strategy.address, 1000, 0, 0);
+    const bal0 = await testToken0.balanceOf(pool.address);
+    const bal1 = await testToken1.balanceOf(pool.address);
+    const share = await v3Aggregator.shares(strategy.address, owner.address);
+    console.log({
+      bal0: bal0.toString(),
+      bal1: bal1.toString(),
+      share: share.toString(),
+    });
+    assert.equal(share.toString(), shareBefore.toString(), "wrong shares");
 
-    // const bal0 = await testToken0.balanceOf(pool.address);
-    // const bal1 = await testToken1.balanceOf(pool.address);
-    // const share = await v3Aggregator.shares(strategy.address, owner.address);
+    await v3Aggregator.removeLiquidity(strategy.address, 1000, 0, 0);
 
-    // console.log({
-    //   bal0: bal0.toString(),
-    //   bal1: bal1.toString(),
-    //   share: share.toString(),
-    // });
+    const bal0After = await testToken0.balanceOf(pool.address);
+    const bal1After = await testToken1.balanceOf(pool.address);
+    const shareAfter = await v3Aggregator.shares(strategy.address, owner.address);
+
+    console.log({
+      bal0: bal0After.toString(),
+      bal1: bal1After.toString(),
+      share: shareAfter.toString(),
+    });
+    assert.equal(shareAfter.toString(), "0", "shares properly removed");
+    // assert.equal(bal0After.toString(), "0", "wrong bal0");  // leaves 2 wei
+    // assert.equal(bal1After.toString(), "0", "wrong bal1");
   });
 
   it("Should rebalance", async function () {
@@ -224,6 +255,60 @@ describe("V3Aggregator", function () {
     //   share: share.toString(),
     // });
   });
+
+  it("multiple users", async () => {
+
+  })
+
+  it("add liq then swap, remove liq", async () => {
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
+
+    const bal0 = await testToken0.balanceOf(pool.address);
+    const bal1 = await testToken1.balanceOf(pool.address);
+    const share = await v3Aggregator.shares(strategy.address, owner.address);
+    const slot0 = await pool.slot0();
+
+    console.log({
+      sqrtPriceX96: slot0.sqrtPriceX96.toString(),
+      bal0: bal0.toString(),
+      bal1: bal1.toString(),
+      share: share.toString(),
+    });
+
+    expect(share).to.equal(1000);
+
+    // uniswapV3 swap call
+    const swap = await pool.swap(
+      owner.address,
+      true, // zeroForOne ??
+      200, // amountSepcified
+      slot0.sqrtPriceX96,
+      0 // data
+    );
+
+    const bal0After = await testToken0.balanceOf(pool.address);
+    const bal1After = await testToken1.balanceOf(pool.address);
+    const shareAfter = await v3Aggregator.shares(strategy.address, owner.address);
+    const slot0After = await pool.slot0();
+
+    console.log({
+      sqrtPriceX96: slot0After.sqrtPriceX96.toString(),
+      bal0: bal0After.toString(),
+      bal1: bal1After.toString(),
+      share: shareAfter.toString(),
+    });
+
+    // remove liq, make sure correct amount returned.
+  })
 });
 
 function encodePriceSqrt(reserve0, reserve1) {
