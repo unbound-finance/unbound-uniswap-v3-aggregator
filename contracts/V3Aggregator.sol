@@ -77,6 +77,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
     mapping(address => Strategy) public strategies;
 
+    mapping(address => bool) public blacklisted;
+
     // to update protocol fees
     address public feeSetter;
 
@@ -277,6 +279,9 @@ contract V3Aggregator is IUniswapV3MintCallback {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage oldStrategy = strategies[_strategy];
+
+        // add blacklisting check
+        require(!blacklisted[_strategy], "blacklisted");
 
         // // TODO: Store past liquidity
         uint128 oldLiquidity =
@@ -510,5 +515,10 @@ contract V3Aggregator is IUniswapV3MintCallback {
     function changeFeeTo(address _feeTo) external {
         require(msg.sender == feeSetter);
         feeTo = _feeTo;
+    }
+
+    function blacklist(address _strategy) external {
+        require(msg.sender == feeSetter);
+        blacklisted[_strategy] = true;
     }
 }
