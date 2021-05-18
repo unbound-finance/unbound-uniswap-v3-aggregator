@@ -24,6 +24,39 @@ contract V3Aggregator is IUniswapV3MintCallback {
     using SafeMath for uint256;
     using SafeCast for uint256;
 
+    // events
+    event AddLiquidity(
+        address indexed strategy,
+        uint256 amount0,
+        uint256 amount1
+    );
+
+    event RemoveLiquidity(
+        address indexed strategy,
+        uint256 amount0,
+        uint256 amount1
+    );
+
+    event MintShare(
+        address indexed strategy,
+        address indexed user,
+        uint256 amount
+    );
+
+    event BurnShare(
+        address indexed strategy,
+        address indexed user,
+        uint256 amount
+    );
+
+    event Rebalance(
+        address indexed strategy,
+        address indexed caller,
+        uint128 liquidity,
+        int24 tickLower,
+        int24 tickUpper
+    );
+
     // store total stake points
     uint256 public totalShare;
 
@@ -130,6 +163,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
 
         updateStrategyData(_strategy);
+
+        emit AddLiquidity(_strategy, amount0, amount1);
     }
 
     /*
@@ -227,6 +262,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
         if (amount1Real > 0) {
             IERC20(pool.token1()).transfer(msg.sender, amount1Real);
         }
+
+        RemoveLiquidity(_strategy, amount0Real, amount1Real);
     }
 
     /*
@@ -248,10 +285,6 @@ contract V3Aggregator is IUniswapV3MintCallback {
                 oldStrategy.tickLower,
                 oldStrategy.tickUpper
             );
-
-        // if (oldLiquidity > 0) {
-        int24 tickLower = strategy.tickLower();
-        int24 tickUpper = strategy.tickUpper();
 
         // burn liquidity
         (uint256 owed0, uint256 owed1) =
@@ -280,6 +313,15 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
         // update strategy
         updateStrategyData(_strategy);
+
+        // emit event
+        emit Rebalance(
+            _strategy,
+            msg.sender,
+            liquidity,
+            strategy.tickLower(),
+            strategy.tickUpper()
+        );
     }
 
     /// @dev Callback for Uniswap V3 pool.
@@ -339,6 +381,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
         shares[_strategy][_to] = shares[_strategy][_to].add(uint256(_shares));
         // update total shares
         totalShares[_strategy] = totalShares[_strategy].add(_shares);
+        // emit event
+        emit MintShare(_strategy, _to, _shares);
     }
 
     /*
@@ -353,6 +397,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
         // update total shares
         totalShares[_strategy] = totalShares[_strategy].sub(_shares);
+        emit BurnShare(_strategy, msg.sender, _shares);
     }
 
     /*
