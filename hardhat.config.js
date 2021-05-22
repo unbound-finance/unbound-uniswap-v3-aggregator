@@ -23,8 +23,8 @@ module.exports = {
       allowUnlimitedContractSize: true,
     },
     kovan: {
-      url: `https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
-      accounts: [process.env.PRIVATE_KEY],
+      url: "https://kovan.infura.io/v3/fbfa8c28d58f4837a199d6d16f7f43f9", //`https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: ["134b81495b60d02d1326e1892dbae2705004649f42cf1ee786eabb38de0b2101"], //[process.env.PRIVATE_KEY],
       gasPrice: 50000000000,
     }
   },

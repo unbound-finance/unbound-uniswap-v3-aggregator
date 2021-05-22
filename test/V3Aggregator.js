@@ -25,24 +25,24 @@ beforeEach(async function () {
   const TickMath = await ethers.getContractFactory(
     "contracts/test/core/libraries/TickMath.sol:TickMath"
   );
-
+  
   const tickMath = await TickMath.deploy();
-
+  
   const Factory = await ethers.getContractFactory("UniswapV3Factory", {
     libraries: {
       TickMath: tickMath.address,
     },
   });
-
+  
   factory = await Factory.deploy();
-
+  
   // create a pool
 
   const TestToken = await ethers.getContractFactory("ERC20");
   const TestStrategy = await ethers.getContractFactory("TestStrategy");
-  const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
+  const V3Aggregator = await ethers.getContractFactory("V3AggregatorTest");
 
-  v3Aggregator = await V3Aggregator.deploy();
+  v3Aggregator = await V3Aggregator.deploy(owner.address);
 
   // deployments
   testToken0 = await TestToken.deploy(
@@ -62,7 +62,7 @@ beforeEach(async function () {
   );
 
   await factory.createPool(testToken0.address, testToken1.address, "3000");
-
+    
   // initialize the pool
   const poolAddress = await factory.getPool(
     testToken0.address,
@@ -108,6 +108,40 @@ describe("V3Aggregator", function () {
   it("Should add right amount of successfully", async function () {
     await testToken0.approve(v3Aggregator.address, amountA);
     await testToken1.approve(v3Aggregator.address, amountB);
+    
+    
+    const tickLow = await strategy.tickLower();
+    const tickUp = await strategy.tickUpper();
+    const posKey = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLow, tickUp);
+
+    // console.log(posKey.value.toString());
+    // console.log(1);
+    // const currentLiq = await pool.positions(posKey.value.toHexString());
+
+    // console.log(tickLow);
+    // console.log(tickUp)
+    // console.log(currentLiq);
+    console.log(2)
+    const slot = await pool.slot0();
+    const ratioA = await v3Aggregator.getSqrtRatioTEST(tickLow);
+    const ratioB = await v3Aggregator.getSqrtRatioTEST(tickUp);
+    console.log(slot[0].toString());
+    console.log(ratioA)
+    console.log(ratioA.value.toString());
+    console.log(ratioB.value.toString())
+    const getLiqAmt = await v3Aggregator.getLiqAmtTEST(
+      slot[0].toString(),
+      ratioA.value.toString(),
+      ratioB.value.toString(),
+      amountA,
+      amountB
+    )
+    console.log(getLiqAmt);
+
+    // const getLiqForAmt = await 
+
+    // how do we check what the correct amounts to add from amountA and amountB are?
+
     // add liquidity using aggregator contract
     await v3Aggregator.addLiquidity(
       strategy.address,
