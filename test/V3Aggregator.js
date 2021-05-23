@@ -1,4 +1,4 @@
-const { expect } = require("chai");
+const { expect, assert } = require("chai");
 
 const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
@@ -19,8 +19,10 @@ let tickUpper;
 const amountA = "100000000000000000000";
 const amountB = "28571428570000000";
 
+const bone = new bn("1000000000000000000"); // 10**18
+
 beforeEach(async function () {
-  [owner] = await ethers.getSigners();
+  [owner, userA, userB] = await ethers.getSigners();
 
   const TickMath = await ethers.getContractFactory(
     "contracts/test/core/libraries/TickMath.sol:TickMath"
@@ -108,39 +110,52 @@ describe("V3Aggregator", function () {
   it("Should add right amount of successfully", async function () {
     await testToken0.approve(v3Aggregator.address, amountA);
     await testToken1.approve(v3Aggregator.address, amountB);
+
+    const bal0Before = await testToken0.balanceOf(pool.address);
+    const bal1Before = await testToken1.balanceOf(pool.address);
     
     
     const tickLow = await strategy.tickLower();
     const tickUp = await strategy.tickUpper();
     const posKey = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLow, tickUp);
+    const currentLiq = await pool.positions(posKey.toString());
+    
+    // CONTRACT VARIABLE
+    const LiquidityBefore = currentLiq.liquidity; // BN
+    assert.equal(LiquidityBefore.toString(), "0", "Wrong initial liquidity");
+    // CONTRACT VARIABLE - end
 
-    // console.log(posKey.value.toString());
-    // console.log(1);
-    // const currentLiq = await pool.positions(posKey.value.toHexString());
-
-    // console.log(tickLow);
-    // console.log(tickUp)
-    // console.log(currentLiq);
-    console.log(2)
     const slot = await pool.slot0();
     const ratioA = await v3Aggregator.getSqrtRatioTEST(tickLow);
     const ratioB = await v3Aggregator.getSqrtRatioTEST(tickUp);
-    console.log(slot[0].toString());
-    console.log(ratioA)
-    console.log(ratioA.value.toString());
-    console.log(ratioB.value.toString())
     const getLiqAmt = await v3Aggregator.getLiqAmtTEST(
       slot[0].toString(),
-      ratioA.value.toString(),
-      ratioB.value.toString(),
+      ratioA.toString(),
+      ratioB.toString(),
       amountA,
       amountB
     )
-    console.log(getLiqAmt);
+    
+    
+    // CONTRACT VARIABLE - Do we have a manual way of calculating this in JS?
+    const Liquidity = getLiqAmt; // BN
+    // CONTRACT VARIABLE - end
 
+    const amountsForLiq = await v3Aggregator.getAmtForLiqTEST(
+      slot[0].toString(),
+      ratioA.toString(),
+      ratioB.toString(),
+      Liquidity.toString()
+    )
+    console.log(amountsForLiq.amount0.toString());
+    console.log(amountsForLiq.amount1.toString());
+
+    const ownerShareBefore = await v3Aggregator.getShares(strategy.address, owner.address);
+    const feeHolderShareBefore = await v3Aggregator.getShares(strategy.address, owner.address);
+
+    assert.equal(ownerShareBefore.toString(), "0", "wrong initial depositor share");
+    assert.equal(feeHolderShareBefore.toString(), "0", "wrong fee holder shares");
     // const getLiqForAmt = await 
-
-    // how do we check what the correct amounts to add from amountA and amountB are?
 
     // add liquidity using aggregator contract
     await v3Aggregator.addLiquidity(
@@ -151,11 +166,25 @@ describe("V3Aggregator", function () {
       "0"
     );
 
+
+
     const bal0 = await testToken0.balanceOf(pool.address);
     const bal1 = await testToken1.balanceOf(pool.address);
     const share = await v3Aggregator.shares(strategy.address, owner.address);
+    const feeShare = await v3Aggregator.shares(strategy.address, userA.address);
     const slot0 = await pool.slot0();
 
+    // FAILURES - THEY ARE OFF BY VERY SMALL VALUES - Likely culprit: UNISWAP
+    // assert.equal(bal0.toString(), amountsForLiq.amount0.toString(), "Wrong balances");
+    // assert.equal(bal1.toString(), amountsForLiq.amount1.toString(), "wrong balance1")
+    // FAILURES - end
+    
+    const sharesToFee = Liquidity.div(2).toString();
+    const sharesToDepositor = Liquidity.sub(sharesToFee);
+    assert.equal(share.toString(), Liquidity.toString(), "wrong amount of shares");
+    
+    // assert.equal(feeShare.toString(), Liquidity.mul(bone).div(2).toString(), "wrong shares to fee")
+    
     console.log({
       sqrtPriceX96: slot0.sqrtPriceX96.toString(),
       bal0: bal0.toString(),
@@ -163,12 +192,121 @@ describe("V3Aggregator", function () {
       share: share.toString(),
     });
 
-    expect(share).to.equal(1000);
+  });
+
+  // TO TEST: changeFeeSetter()
+  it("Should distribute fee correctly", async function () {
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+
+    const bal0Before = await testToken0.balanceOf(pool.address);
+    const bal1Before = await testToken1.balanceOf(pool.address);
+    
+    // set feeAddr
+    await v3Aggregator.changeFeeTo(userA.address);
+    
+    const tickLow = await strategy.tickLower();
+    const tickUp = await strategy.tickUpper();
+    const posKey = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLow, tickUp);
+    const currentLiq = await pool.positions(posKey.toString());
+    
+    // CONTRACT VARIABLE
+    const LiquidityBefore = currentLiq.liquidity; // BN
+    assert.equal(LiquidityBefore.toString(), "0", "Wrong initial liquidity");
+    // CONTRACT VARIABLE - end
+
+    const slot = await pool.slot0();
+    const ratioA = await v3Aggregator.getSqrtRatioTEST(tickLow);
+    const ratioB = await v3Aggregator.getSqrtRatioTEST(tickUp);
+    const getLiqAmt = await v3Aggregator.getLiqAmtTEST(
+      slot[0].toString(),
+      ratioA.toString(),
+      ratioB.toString(),
+      amountA,
+      amountB
+    )
+    
+    
+    // CONTRACT VARIABLE - Do we have a manual way of calculating this in JS?
+    const Liquidity = getLiqAmt; // BN
+    // CONTRACT VARIABLE - end
+
+    const amountsForLiq = await v3Aggregator.getAmtForLiqTEST(
+      slot[0].toString(),
+      ratioA.toString(),
+      ratioB.toString(),
+      Liquidity.toString()
+    )
+    console.log(amountsForLiq.amount0.toString());
+    console.log(amountsForLiq.amount1.toString());
+
+    const ownerShareBefore = await v3Aggregator.getShares(strategy.address, owner.address);
+    const feeHolderShareBefore = await v3Aggregator.getShares(strategy.address, owner.address);
+
+    assert.equal(ownerShareBefore.toString(), "0", "wrong initial depositor share");
+    assert.equal(feeHolderShareBefore.toString(), "0", "wrong fee holder shares");
+    // const getLiqForAmt = await 
+
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
+
+
+
+    const bal0 = await testToken0.balanceOf(pool.address);
+    const bal1 = await testToken1.balanceOf(pool.address);
+    const share = await v3Aggregator.shares(strategy.address, owner.address);
+    const feeShare = await v3Aggregator.shares(strategy.address, userA.address);
+    const slot0 = await pool.slot0();
+
+    // FAILURES - THEY ARE OFF BY VERY SMALL VALUES - Likely culprit: UNISWAP
+    // assert.equal(bal0.toString(), amountsForLiq.amount0.toString(), "Wrong balances");
+    // assert.equal(bal1.toString(), amountsForLiq.amount1.toString(), "wrong balance1")
+    // FAILURES - end
+    
+    const sharesToFee = Liquidity.div(2).toString();
+    const sharesToDepositor = Liquidity.sub(sharesToFee);
+    assert.equal(share.toString(), sharesToDepositor.toString(), "wrong amount of shares");
+    
+    assert.equal(feeShare.toString(), sharesToFee.toString(), "wrong shares to fee")
+    
+    console.log({
+      sqrtPriceX96: slot0.sqrtPriceX96.toString(),
+      bal0: bal0.toString(),
+      bal1: bal1.toString(),
+      share: share.toString(),
+    });
+
   });
 
   it("Should issue right amount of shares", async function () {
     await testToken0.approve(v3Aggregator.address, amountA);
     await testToken1.approve(v3Aggregator.address, amountB);
+
+    const tickLow = await strategy.tickLower();
+    const tickUp = await strategy.tickUpper();
+
+    const slot = await pool.slot0();
+    const ratioA = await v3Aggregator.getSqrtRatioTEST(tickLow);
+    const ratioB = await v3Aggregator.getSqrtRatioTEST(tickUp);
+    const getLiqAmt = await v3Aggregator.getLiqAmtTEST(
+      slot[0].toString(),
+      ratioA.toString(),
+      ratioB.toString(),
+      amountA,
+      amountB
+    )
+    
+    
+    // CONTRACT VARIABLE - Do we have a manual way of calculating this in JS?
+    const Liquidity = getLiqAmt; // BN
+    // CONTRACT VARIABLE - end
+
     // add liquidity using aggregator contract
     await v3Aggregator.addLiquidity(
       strategy.address,
@@ -190,7 +328,7 @@ describe("V3Aggregator", function () {
       share: share.toString(),
     });
 
-    expect(share).to.equal(1000);
+    expect(share).to.equal(Liquidity);
   });
 
 

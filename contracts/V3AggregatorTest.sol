@@ -62,6 +62,12 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
 
     mapping(address => mapping(address => uint256)) public shares;
 
+    // TEST FUNCTION
+    function getShares(address strat, address user) external view returns(uint256) {
+        return shares[strat][user];
+    }
+    // TEST - end
+
     // mapping of strategies with their total share
     mapping(address => uint256) totalShares;
 
@@ -85,12 +91,16 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
     // to receive the fees
     address public feeTo;
 
-    // protocol fees, 1e8 is 100%
+    // protocol fees, 1e8 is 100% // don't you mean 1e6?
     uint256 public PROTOCOL_FEE;
 
     constructor(address _feeSetter) {
         feeSetter = _feeSetter;
         feeTo = address(0);
+        
+        // TEST 
+        PROTOCOL_FEE = 500000;
+        // TEST - end
     }
 
     /*
@@ -139,15 +149,28 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
                 strategy.tickUpper()
             );
 
+        // TEST
+        require(liquidityAfter - liquidityBefore == liquidity, "Loss of liquidity");
+        // TEST - END
+
+        // PENDING TEST CHANGES - REVIEW
+        // POTENTIAL SOLUTION BELOW
+
         // calculate shares
         // TODO: Replace liquidity with liquidityBefore
         share = uint256(liquidityAfter)
             .sub(liquidity)
             .mul(totalShare)
-            .div(liquidity)
-            .add(1000);
+            .div(liquidity);
+            // .add(1000);
 
-        if (feeTo != address(0)) {
+        if (share == 0) {
+            share = liquidity; // can add decimals here if desired.
+        }
+        // PENDING TEST CHANGES - END
+
+        // ADD CHECK FOR PROTOCOL_FEE == 0
+        if (feeTo != address(0) ) {
             uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
             // issue fee
             issueShare(_strategy, fee, feeTo);
@@ -169,7 +192,7 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
         emit AddLiquidity(_strategy, amount0, amount1);
     }
 
-    function TESTgetPositionKey(address addr, int24 tickLower, int24 tickUpper) external returns(bytes32) {
+    function TESTgetPositionKey(address addr, int24 tickLower, int24 tickUpper) external view returns(bytes32) {
         return PositionKey.compute(addr, tickLower, tickUpper);
     }
 
@@ -442,12 +465,13 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
         );
     }
 
-    function getSqrtRatioTEST(int24 tick) external returns(uint160 liquidity) {
+    function getSqrtRatioTEST(int24 tick) external view returns(uint160 liquidity) {
         liquidity = TickMath.getSqrtRatioAtTick(tick);
     }
 
     function getLiqAmtTEST(uint160 sqrtRatioX96, uint160 sqrtRatioAX96, uint160 sqrtRatioBX96, uint256 _amount0, uint256 _amount1)
         external
+        view
         returns(uint128 liquidity) 
         {
             liquidity = LiquidityAmounts.getLiquidityForAmounts(
@@ -487,6 +511,19 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
             _liquidity
         );
     }
+
+    function getAmtForLiqTEST(uint160 sqrtRatioX96, uint160 sqrtRatioAX96, uint160 sqrtRatioBX96, uint128 _liquidity)
+        external
+        view
+        returns(uint256 amount0, uint256 amount1) 
+        {
+            (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
+                sqrtRatioX96,
+                sqrtRatioAX96,
+                sqrtRatioBX96,
+                _liquidity
+            );
+        }
 
     /*
      * @dev Get the liquidity between current ticks
