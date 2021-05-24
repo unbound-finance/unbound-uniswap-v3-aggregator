@@ -93,14 +93,12 @@ contract V3Aggregator is IUniswapV3MintCallback {
         feeTo = address(0);
     }
 
-    /*
-     * @notice Add liquidity to specific strategy
-     * @param _strategy Address of the strategy
-     * @param _amount0 Desired token0 amount
-     * @param _amount1 Desired token1 amount
-     * @param _amount0Min Minimum amoount for to be added for token0
-     * @param _amount1Min Minimum amoount for to be added for token1
-     */
+    /// @notice Add liquidity to specific strategy
+    /// @param _strategy Address of the strategy
+    /// @param _amount0 Desired token0 amount
+    /// @param _amount1 Desired token1 amount
+    /// @param _amount0Min Minimum amoount for to be added for token0
+    /// @param _amount1Min Minimum amoount for to be added for token1
     function addLiquidity(
         address _strategy,
         uint256 _amount0,
@@ -169,11 +167,9 @@ contract V3Aggregator is IUniswapV3MintCallback {
         emit AddLiquidity(_strategy, amount0, amount1);
     }
 
-    /*
-     * @notice Mints liquidity from V3 Pool
-     * @param _stategy Address of the strategy
-     * @param _liquidity Liquidity to mint
-     */
+    /// @notice Mints liquidity from V3 Pool
+    /// @param _stategy Address of the strategy
+    /// @param _liquidity Liquidity to mint
     function mintLiquidity(
         address _strategy,
         uint128 _liquidity,
@@ -195,13 +191,11 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
     }
 
-    /*
-     * @notice Removes liquidity from the pool
-     * @param _stategy Address of the strategy
-     * @param _shares Share user wants to burn
-     * @param _amount0Min Minimum amount0 user should receive
-     * @param _amount1Min Minimum amount1 user should receive
-     */
+    /// @notice Removes liquidity from the pool
+    /// @param _stategy Address of the strategy
+    /// @param _shares Share user wants to burn
+    /// @param _amount0Min Minimum amount0 user should receive
+    /// @param _amount1Min Minimum amount1 user should receive
     function removeLiquidity(
         address _strategy,
         uint256 _shares,
@@ -268,10 +262,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
         RemoveLiquidity(_strategy, amount0Real, amount1Real);
     }
 
-    /*
-     * @notice Rebalances the pool to new ranges
-     * @param _strategy Address of the strategy
-     */
+    /// @notice Rebalances the pool to new ranges
+    /// @param _strategy Address of the strategy
     function rebalance(address _strategy)
         external
         returns (uint256 amount0, uint256 amount1)
@@ -371,12 +363,10 @@ contract V3Aggregator is IUniswapV3MintCallback {
         }
     }
 
-    /*
-     * @notice Updates the shares of the user
-     * @param _strategy Address of the strategy
-     * @param _shares amount of shares user wants to burn
-     * @param _to address where shares should be issued
-     */
+    /// @notice Updates the shares of the user
+    /// @param _strategy Address of the strategy
+    /// @param _shares amount of shares user wants to burn
+    /// @param _to address where shares should be issued
     function issueShare(
         address _strategy,
         uint256 _shares,
@@ -390,11 +380,9 @@ contract V3Aggregator is IUniswapV3MintCallback {
         emit MintShare(_strategy, _to, _shares);
     }
 
-    /*
-     * @notice Burns the share of the user
-     * @param _strategy Address of the strategy
-     * @param _shares amount of shares user wants to burn
-     */
+    /// @notice Burns the share of the user
+    /// @param _strategy Address of the strategy
+    /// @param _shares amount of shares user wants to burn
     function burnShare(address _strategy, uint256 _shares) internal {
         // update shares
         shares[_strategy][msg.sender] = shares[_strategy][msg.sender].sub(
@@ -405,13 +393,11 @@ contract V3Aggregator is IUniswapV3MintCallback {
         emit BurnShare(_strategy, msg.sender, _shares);
     }
 
-    /*
-     * @notice Calculates the liquidity amount using current ranges
-     * @param _strategy Address of the strategy
-     * @param _amount0 Amount to be added for token0
-     * @param _amount1 Amount to be added for token1
-     * @return liquidity Liquidity amount derived from token amounts
-     */
+    /// @notice Calculates the liquidity amount using current ranges
+    /// @param _strategy Address of the strategy
+    /// @param _amount0 Amount to be added for token0
+    /// @param _amount1 Amount to be added for token1
+    /// @return liquidity Liquidity amount derived from token amounts
     function getLiquidityForAmounts(
         address _strategy,
         uint256 _amount0,
@@ -437,11 +423,9 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
     }
 
-    /*
-     * @notice Calculates the liquidity amount using current ranges
-     * @param _strategy Address of the strategy
-     * @param _liquidity Liquidity of the pool
-     */
+    /// @notice Calculates the liquidity amount using current ranges
+    /// @param _strategy Address of the strategy
+    /// @param _liquidity Liquidity of the pool
     function getAmountsForLiquidity(address _strategy, uint128 _liquidity)
         internal
         view
@@ -466,12 +450,10 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
     }
 
-    /*
-     * @dev Get the liquidity between current ticks
-     * @param _strategy Strategy address
-     * @param _tickLower Lower tick of the range
-     * @param _tickUpper Upper tick of the range
-     */
+    /// @dev Get the liquidity between current ticks
+    /// @param _strategy Strategy address
+    /// @param _tickLower Lower tick of the range
+    /// @param _tickUpper Upper tick of the range
     function getCurrentLiquidity(
         address _pool,
         int24 _tickLower,
@@ -483,10 +465,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
     }
 
-    /*
-     * @dev Updates strategy data for future use
-     * @param _stategy Address of the strategy
-     */
+    /// @dev Updates strategy data for future use
+    /// @param _stategy Address of the strategy
     function updateStrategyData(address _strategy) internal {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         Strategy storage newStrategy = strategies[_strategy];
@@ -499,19 +479,15 @@ contract V3Aggregator is IUniswapV3MintCallback {
         }
     }
 
-    /*
-     * @dev Change the fee setter's address
-     * @param _feeSetter New feeSetter address
-     */
+    /// @dev Change the fee setter's address
+    /// @param _feeSetter New feeSetter address
     function changeFeeSetter(address _feeSetter) external {
         require(msg.sender == _feeSetter);
         feeSetter = _feeSetter;
     }
 
-    /*
-     * @dev Change fee receiver
-     * @param _feeTo New fee receiver
-     */
+    /// @dev Change fee receiver
+    /// @param _feeTo New fee receiver
     function changeFeeTo(address _feeTo) external {
         require(msg.sender == feeSetter);
         feeTo = _feeTo;
