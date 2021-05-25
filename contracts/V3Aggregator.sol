@@ -49,7 +49,12 @@ contract V3Aggregator is IUniswapV3MintCallback {
         uint256 amount
     );
 
-    event FeesClaimed(address indexed pool, uint256 amount0, uint256 amount1);
+    event FeesClaimed(
+        address indexed pool,
+        address indexed strategy,
+        uint256 amount0,
+        uint256 amount1
+    );
 
     event Rebalance(
         address indexed strategy,
@@ -375,10 +380,12 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
     /// @notice Burns liquidity in the given range
     /// @param _pool Address of the pool
+    /// @param _strategy Address of the strategy
     /// @param _tickLower Lower Tick
     /// @param _tickUpper Upper Tick
     function burnLiquidity(
         address _pool,
+        address _strategy,
         int24 _tickLower,
         int24 _tickUpper
     )
@@ -406,6 +413,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
 
         emit FeesClaimed(
+            _strategy,
             _pool,
             uint256(collect0) - owed0,
             uint256(collect1) - owed1
@@ -430,6 +438,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
         (uint256 rangeAmount0, uint256 rangeAmount1, uint128 rangeLiquidity) =
             burnLiquidity(
                 address(pool),
+                address(strategy),
                 oldStrategy.tickLower,
                 oldStrategy.tickUpper
             );
@@ -445,6 +454,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
             // Burn liquidity for limit order
             (limitAmount0, limitAmount1, limitLiquidity) = burnLiquidity(
                 address(pool),
+                address(strategy),
                 oldStrategy.secondaryTickLower,
                 oldStrategy.secondaryTickUpper
             );
