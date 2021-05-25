@@ -399,6 +399,78 @@ describe("V3Aggregator", function () {
       bal0: bal0.toString(),
       bal1: bal1.toString(),
       share: share.toString(),
+      shareAfter: shareAfter.toString()
+    });
+  });
+
+  it("Should remove partial liquidity", async function () {
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+
+
+
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
+
+    // const newTickLower = calculateTick(3200, 60);
+    // const newTickUpper = calculateTick(4200, 60);
+
+    // await strategy.changeTicks(newTickLower, newTickUpper);
+    // await v3Aggregator.rebalance(strategy.address, tickLower, tickUpper);
+
+    const tickLow = await strategy.tickLower();
+    const tickUp = await strategy.tickUpper();
+    const posKey = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLow, tickUp);
+    const currentLiq = await pool.positions(posKey.toString());
+    
+    // CONTRACT VARIABLE
+    const LiquidityCurrent = currentLiq.liquidity; // BN
+    // CONTRACT VARIABLE - end
+    const share = await v3Aggregator.shares(strategy.address, owner.address);
+
+    const totalShares = await v3Aggregator.totalShares(strategy.address);
+    const liquidity = share.mul(LiquidityCurrent).div(totalShares);
+
+    const slot = await pool.slot0();
+    const ratioA = await v3Aggregator.getSqrtRatioTEST(tickLow);
+    const ratioB = await v3Aggregator.getSqrtRatioTEST(tickUp);
+
+    const amountsForLiq = await v3Aggregator.getAmtForLiqTEST(
+      slot[0].toString(),
+      ratioA.toString(),
+      ratioB.toString(),
+      liquidity.toString()
+    )
+
+    console.log(amountsForLiq[0].toString());
+    console.log(amountsForLiq[1].toString());
+
+    const bal0Before = await testToken0.balanceOf(pool.address);
+    const bal1Before = await testToken1.balanceOf(pool.address);
+    // const share = await v3Aggregator.shares(strategy.address, owner.address);
+    
+
+    await v3Aggregator.removeLiquidity(strategy.address, parseInt(parseInt(share) / 2), 0, 0);
+
+    const bal0 = await testToken0.balanceOf(pool.address);
+    const bal1 = await testToken1.balanceOf(pool.address);
+    const shareAfter = await v3Aggregator.shares(strategy.address, owner.address);
+
+    // assert.equal(bal0.toString(), bal0Before.sub(amountsForLiq[0]).toString(), "wrong bal 0");
+    // assert.equal(bal1.toString(), bal1Before.sub(amountsForLiq[1]).toString(), "wrong bal 1");
+
+    // assert.equal(shareAfter.toString(), share.sub(share), "wrong shares");
+    console.log({
+      bal0: bal0.toString(),
+      bal1: bal1.toString(),
+      share: share.toString(),
+      shareAfter: shareAfter.toString(),
     });
   });
 
