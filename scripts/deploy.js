@@ -12,7 +12,7 @@ async function main() {
 
   const TestToken = await ethers.getContractFactory("ERC20");
   const TestStrategy = await ethers.getContractFactory("TestStrategy");
-  const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
+  const V3Aggregator = await ethers.getContractFactory("V3AggregatorTest");
 
   const factory = await ethers.getContractAt("UniswapV3Factory", factoryAddress);
 
