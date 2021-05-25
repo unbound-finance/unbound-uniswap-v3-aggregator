@@ -69,7 +69,8 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
     // TEST - end
 
     // mapping of strategies with their total share
-    mapping(address => uint256) totalShares;
+    mapping(address => uint256) public totalShares;
+    // TEST -- TEST -- TEST -- totalShares "PUBLIC" is test
 
     struct MintCallbackData {
         address payer;
@@ -293,7 +294,7 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
             IERC20(pool.token1()).transfer(msg.sender, amount1Real);
         }
 
-        RemoveLiquidity(_strategy, amount0Real, amount1Real);
+        emit RemoveLiquidity(_strategy, amount0Real, amount1Real);
     }
 
     /*
