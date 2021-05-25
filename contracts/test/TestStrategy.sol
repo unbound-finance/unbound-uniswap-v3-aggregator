@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract TestStrategy {
-
     int24 public tickLower;
     int24 public tickUpper;
     int24 public secondaryTickLower;
@@ -16,6 +15,7 @@ contract TestStrategy {
     address public pool;
     uint256 public fee;
     bool public swap;
+    bool public hold;
 
     constructor(
         uint256 _range0,
@@ -44,5 +44,13 @@ contract TestStrategy {
         secondaryTickLower = _newSecondaryTickLower;
         secondaryTickUpper = _newSecondaryTickUpper;
         swap = _swap;
+    }
+
+    function holdFunds() public{
+        tickLower = 0;
+        tickUpper = 0;
+        secondaryTickLower = 0;
+        secondaryTickUpper = 0;
+        swap = false;
     }
 }

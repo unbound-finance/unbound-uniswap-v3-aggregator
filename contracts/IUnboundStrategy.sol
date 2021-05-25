@@ -12,6 +12,8 @@ interface IUnboundStrategy {
 
     function swap() external view returns(bool);
 
+    function hold() external view returns(bool);
+
     function secondaryTickUpper() external view returns(int24);
     
     function secondaryTickLower() external view returns(int24);

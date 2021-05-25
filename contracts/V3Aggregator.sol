@@ -83,11 +83,20 @@ contract V3Aggregator is IUniswapV3MintCallback {
         int24 secondaryTickLower;
         int24 secondaryTickUpper;
         bool swap;
+        bool hold;
     }
 
     mapping(address => Strategy) public strategies;
 
+    // mapping of blacklisted strategies
     mapping(address => bool) public blacklisted;
+
+    struct Hold {
+        uint256 amount0;
+        uint256 amount1;
+    }
+    // hold
+    mapping(address => Hold) public holds;
 
     // to update protocol fees
     address public feeSetter;
@@ -278,10 +287,40 @@ contract V3Aggregator is IUniswapV3MintCallback {
         // add blacklisting check
         require(!blacklisted[_strategy], "blacklisted");
 
-        uint128 oldLiquidity;
+        uint128 liquidity;
 
-        // burn all liquidity
-        (amount0, amount1, oldLiquidity) = burnAllLiquidity(_strategy);
+        if (strategy.hold()) {
+            (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
+            Hold storage newHold = holds[_strategy];
+            newHold.amount0 = amount0;
+            newHold.amount1 = amount1;
+        } else if (oldStrategy.hold) {
+            Hold storage oldHold = holds[_strategy];
+            amount0 = oldHold.amount0;
+            amount1 = oldHold.amount1;
+            liquidity = getLiquidityForAmounts(
+                address(pool),
+                strategy.tickLower(),
+                strategy.tickUpper(),
+                amount0,
+                amount1
+            );
+            redeploy(_strategy, amount0, amount1, liquidity);
+        } else {
+            (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
+            redeploy(_strategy, amount0, amount1, liquidity);
+        }
+    }
+
+    function redeploy(
+        address _strategy,
+        uint256 _amount0,
+        uint256 _amount1,
+        uint128 _oldLiquidity
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+        Strategy storage oldStrategy = strategies[_strategy];
 
         // calculate current liquidity
         uint128 liquidity =
@@ -289,8 +328,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
                 address(pool),
                 strategy.tickLower(),
                 strategy.tickUpper(),
-                amount0,
-                amount1
+                _amount0,
+                _amount1
             );
 
         // mint liquidity
@@ -303,9 +342,9 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
 
         uint128 unusedLiquidity =
-            oldLiquidity > liquidity
-                ? oldLiquidity - liquidity
-                : liquidity - oldLiquidity;
+            _oldLiquidity > liquidity
+                ? _oldLiquidity - liquidity
+                : liquidity - _oldLiquidity;
 
         // calculate pending amount0 and amount1
         (amount0, amount1) = getAmountsForLiquidity(
