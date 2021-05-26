@@ -474,29 +474,186 @@ describe("V3Aggregator", function () {
     });
   });
 
-  it("Should rebalance", async function () {
+  // test removal after a swap.
+  // it("adds fees correctly after swaps", async function () { })
+  it('blackList works - rebalance', async () => {
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+
     // calculate new ticks
-    // const newTickLower = calculateTick(3200, 60);
-    // const newTickUpper = calculateTick(4200, 60);
-    // // add liquidity using aggregator contract
-    // await v3Aggregator.addLiquidity(
-    //   strategy.address,
-    //   amountA,
-    //   amountB,
-    //   "0",
-    //   "0"
-    // );
-    // // change ticks in strategy
+    const newTickLower = calculateTick(3200, 60);
+    const newTickUpper = calculateTick(4200, 60);
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
+
+    await v3Aggregator.blacklist(strategy.address);
+    // change ticks in strategy
+    await strategy.changeTicks(newTickLower, newTickUpper);
+    await expect(v3Aggregator.rebalance(strategy.address)).to.be.revertedWith("blacklisted"); 
+  })
+  it("Should rebalance", async function () {
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+
+    // calculate new ticks
+    const newTickLower = calculateTick(3200, 60);
+    const newTickUpper = calculateTick(4200, 60);
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
+    const totalSharesBefore = await v3Aggregator.totalShares(strategy.address);
+    // get oldLiquidity
+    const tickLow = await strategy.tickLower();
+    const tickUp = await strategy.tickUpper();
+    const posKey = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLow, tickUp);
+    const currentLiq = await pool.positions(posKey.toString());
+    
+    // CONTRACT VARIABLE
+    const oldLiquidity = currentLiq.liquidity; // BN
+
+    
+
+
+
+    // change ticks in strategy
+    await strategy.changeTicks(newTickLower, newTickUpper);
+    await v3Aggregator.rebalance(strategy.address);
+
+    const owed0Old = v3Aggregator.owed0Test();
+    const owed1Old = v3Aggregator.owed1Test();
+
+    const collect0Old = v3Aggregator.collect0Test();
+    const collect1Old = v3Aggregator.collect1Test();
+
+    const slot = await pool.slot0();
+    const ratioA = await v3Aggregator.getSqrtRatioTEST(tickLow);
+    const ratioB = await v3Aggregator.getSqrtRatioTEST(tickUp);
+    const getLiqAmt = await v3Aggregator.getLiqAmtTEST(
+      slot[0].toString(),
+      ratioA.toString(),
+      ratioB.toString(),
+      owed0Old,
+      owed1Old
+    )
+    
+    // CONTRACT VARIABLE - Do we have a manual way of calculating this in JS?
+    const Liquidity = getLiqAmt; // BN
+    // CONTRACT VARIABLE - end
+
+    // get oldLiquidity
+    const tickLowNew = await strategy.tickLower();
+    const tickUpNew = await strategy.tickUpper();
+    const posKeyNew = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLowNew, tickUpNew);
+    const currentLiqNew = await pool.positions(posKeyNew.toString());
+    
+    // CONTRACT VARIABLE
+    const newLiquidity = currentLiqNew.liquidity; // BN
+
+    assert.equal(oldLiquidity.toString(), Liquidity.toString(), "Liquidity Leak");
+    assert.equal(owed0Old.toString(), collect0Old.toString(), "wrong token0 moved");
+    assert.equal(owed1Old.toString(), collect1Old.toString(), "wrong token1 moved");
+
+    const totalSharesAfter = await v3Aggregator.totalShares(strategy.address);
+    assert.equal(totalSharesAfter.toString(), totalSharesBefore.toString(), "wrong totalShares");
+
+    const bal0 = await testToken0.balanceOf(pool.address);
+    const bal1 = await testToken1.balanceOf(pool.address);
+    const share = await v3Aggregator.shares(strategy.address, owner.address);
+    console.log({
+      bal0: bal0.toString(),
+      bal1: bal1.toString(),
+      share: share.toString(),
+    });
+  });
+  it("Should rebalance without change of tick", async function () {
+    await testToken0.approve(v3Aggregator.address, amountA);
+    await testToken1.approve(v3Aggregator.address, amountB);
+
+    // calculate new ticks
+    const newTickLower = calculateTick(3200, 60);
+    const newTickUpper = calculateTick(4200, 60);
+    // add liquidity using aggregator contract
+    await v3Aggregator.addLiquidity(
+      strategy.address,
+      amountA,
+      amountB,
+      "0",
+      "0"
+    );
+    const totalSharesBefore = await v3Aggregator.totalShares(strategy.address);
+    // get oldLiquidity
+    const tickLow = await strategy.tickLower();
+    const tickUp = await strategy.tickUpper();
+    const posKey = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLow, tickUp);
+    const currentLiq = await pool.positions(posKey.toString());
+    
+    // CONTRACT VARIABLE
+    const oldLiquidity = currentLiq.liquidity; // BN
+
+    
+
+
+
+    // change ticks in strategy
     // await strategy.changeTicks(newTickLower, newTickUpper);
-    // await v3Aggregator.rebalance(strategy.address);
-    // const bal0 = await testToken0.balanceOf(pool.address);
-    // const bal1 = await testToken1.balanceOf(pool.address);
-    // const share = await v3Aggregator.shares(strategy.address, owner.address);
-    // console.log({
-    //   bal0: bal0.toString(),
-    //   bal1: bal1.toString(),
-    //   share: share.toString(),
-    // });
+    await v3Aggregator.rebalance(strategy.address);
+
+    const owed0Old = v3Aggregator.owed0Test();
+    const owed1Old = v3Aggregator.owed1Test();
+
+    const collect0Old = v3Aggregator.collect0Test();
+    const collect1Old = v3Aggregator.collect1Test();
+
+    const slot = await pool.slot0();
+    const ratioA = await v3Aggregator.getSqrtRatioTEST(tickLow);
+    const ratioB = await v3Aggregator.getSqrtRatioTEST(tickUp);
+    const getLiqAmt = await v3Aggregator.getLiqAmtTEST(
+      slot[0].toString(),
+      ratioA.toString(),
+      ratioB.toString(),
+      owed0Old,
+      owed1Old
+    )
+    
+    // CONTRACT VARIABLE - Do we have a manual way of calculating this in JS?
+    const Liquidity = getLiqAmt; // BN
+    // CONTRACT VARIABLE - end
+
+    // get oldLiquidity
+    const tickLowNew = await strategy.tickLower();
+    const tickUpNew = await strategy.tickUpper();
+    const posKeyNew = await v3Aggregator.TESTgetPositionKey(v3Aggregator.address, tickLowNew, tickUpNew);
+    const currentLiqNew = await pool.positions(posKeyNew.toString());
+    
+    // CONTRACT VARIABLE
+    const newLiquidity = currentLiqNew.liquidity; // BN
+
+    assert.equal(oldLiquidity.toString(), Liquidity.toString(), "Liquidity Leak");
+    assert.equal(owed0Old.toString(), collect0Old.toString(), "wrong token0 moved");
+    assert.equal(owed1Old.toString(), collect1Old.toString(), "wrong token1 moved");
+
+    const totalSharesAfter = await v3Aggregator.totalShares(strategy.address);
+    assert.equal(totalSharesAfter.toString(), totalSharesBefore.toString(), "wrong totalShares");
+
+    const bal0 = await testToken0.balanceOf(pool.address);
+    const bal1 = await testToken1.balanceOf(pool.address);
+    const share = await v3Aggregator.shares(strategy.address, owner.address);
+    console.log({
+      bal0: bal0.toString(),
+      bal1: bal1.toString(),
+      share: share.toString(),
+    });
   });
 });
 

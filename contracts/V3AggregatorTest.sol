@@ -301,6 +301,14 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
      * @notice Rebalances the pool to new ranges
      * @param _strategy Address of the strategy
      */
+
+    // TEST -- VARIABLES -- TEST -- VARIABLES
+    uint256 public owed0Test;
+    uint256 public owed1Test;
+    uint128 public collect0Test;
+    uint128 public collect1Test;
+    // TEST -- VARIABLES -- TEST -- VARIABLES
+
     function rebalance(address _strategy)
         external
         returns (uint256 amount0, uint256 amount1)
@@ -327,6 +335,11 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
                 oldStrategy.tickUpper,
                 oldLiquidity
             );
+        
+        // TEST -- TEST -- TEST
+        owed0Test = owed0;
+        owed1Test = owed1;
+        // TEST -- TEST -- TEST -- END
 
         // collect fees
         (uint128 collect0, uint128 collect1) =
@@ -337,7 +350,8 @@ contract V3AggregatorTest is IUniswapV3MintCallback {
                 type(uint128).max,
                 type(uint128).max
             );
-
+        collect0Test = collect0;
+        collect1Test = collect1;
         // calculate current liquidity
         uint128 liquidity =
             getLiquidityForAmounts(_strategy, collect0, collect1);
