@@ -49,6 +49,13 @@ contract V3Aggregator is IUniswapV3MintCallback {
         uint256 amount
     );
 
+    event FeesClaimed(
+        address indexed pool,
+        address indexed strategy,
+        uint256 amount0,
+        uint256 amount1
+    );
+
     event Rebalance(
         address indexed strategy,
         address indexed caller,
@@ -73,11 +80,23 @@ contract V3Aggregator is IUniswapV3MintCallback {
     struct Strategy {
         int24 tickLower;
         int24 tickUpper;
+        int24 secondaryTickLower;
+        int24 secondaryTickUpper;
+        bool swap;
+        bool hold;
     }
 
     mapping(address => Strategy) public strategies;
 
+    // mapping of blacklisted strategies
     mapping(address => bool) public blacklisted;
+
+    struct Hold {
+        uint256 amount0;
+        uint256 amount1;
+    }
+    // hold
+    mapping(address => Hold) public holds;
 
     // to update protocol fees
     address public feeSetter;
@@ -93,14 +112,12 @@ contract V3Aggregator is IUniswapV3MintCallback {
         feeTo = address(0);
     }
 
-    /*
-     * @notice Add liquidity to specific strategy
-     * @param _strategy Address of the strategy
-     * @param _amount0 Desired token0 amount
-     * @param _amount1 Desired token1 amount
-     * @param _amount0Min Minimum amoount for to be added for token0
-     * @param _amount1Min Minimum amoount for to be added for token1
-     */
+    /// @notice Add liquidity to specific strategy
+    /// @param _strategy Address of the strategy
+    /// @param _amount0 Desired token0 amount
+    /// @param _amount1 Desired token1 amount
+    /// @param _amount0Min Minimum amoount for to be added for token0
+    /// @param _amount1Min Minimum amoount for to be added for token1
     function addLiquidity(
         address _strategy,
         uint256 _amount0,
@@ -120,21 +137,31 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
         uint128 liquidityBefore =
             getCurrentLiquidity(
-                strategy.pool(),
+                address(pool),
                 strategy.tickLower(),
                 strategy.tickUpper()
             );
 
-        // console.log(liquidityBefore);
-
         uint128 liquidity =
-            getLiquidityForAmounts(_strategy, _amount0, _amount1);
+            getLiquidityForAmounts(
+                address(pool),
+                strategy.tickLower(),
+                strategy.tickUpper(),
+                _amount0,
+                _amount1
+            );
 
-        (amount0, amount1) = mintLiquidity(_strategy, liquidity, false);
+        (amount0, amount1) = mintLiquidity(
+            address(pool),
+            strategy.tickLower(),
+            strategy.tickUpper(),
+            liquidity,
+            msg.sender
+        );
 
         uint128 liquidityAfter =
             getCurrentLiquidity(
-                strategy.pool(),
+                address(pool),
                 strategy.tickLower(),
                 strategy.tickUpper()
             );
@@ -169,39 +196,11 @@ contract V3Aggregator is IUniswapV3MintCallback {
         emit AddLiquidity(_strategy, amount0, amount1);
     }
 
-    /*
-     * @notice Mints liquidity from V3 Pool
-     * @param _stategy Address of the strategy
-     * @param _liquidity Liquidity to mint
-     */
-    function mintLiquidity(
-        address _strategy,
-        uint128 _liquidity,
-        bool rebalance
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-
-        address payer;
-        payer = rebalance ? address(this) : msg.sender;
-
-        // add liquidity to Uniswap pool
-        (amount0, amount1) = pool.mint(
-            address(this),
-            strategy.tickLower(),
-            strategy.tickUpper(),
-            _liquidity,
-            abi.encode(MintCallbackData({payer: payer, pool: strategy.pool()}))
-        );
-    }
-
-    /*
-     * @notice Removes liquidity from the pool
-     * @param _stategy Address of the strategy
-     * @param _shares Share user wants to burn
-     * @param _amount0Min Minimum amount0 user should receive
-     * @param _amount1Min Minimum amount1 user should receive
-     */
+    /// @notice Removes liquidity from the pool
+    /// @param _strategy Address of the strategy
+    /// @param _shares Share user wants to burn
+    /// @param _amount0Min Minimum amount0 user should receive
+    /// @param _amount1Min Minimum amount1 user should receive
     function removeLiquidity(
         address _strategy,
         uint256 _shares,
@@ -213,7 +212,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
         uint128 currentLiquidity =
             getCurrentLiquidity(
-                strategy.pool(),
+                address(pool),
                 strategy.tickLower(),
                 strategy.tickUpper()
             );
@@ -226,7 +225,12 @@ contract V3Aggregator is IUniswapV3MintCallback {
                 .toUint128();
 
         (uint256 amount0, uint256 amount1) =
-            getAmountsForLiquidity(_strategy, liquidity);
+            getAmountsForLiquidity(
+                address(pool),
+                strategy.tickLower(),
+                strategy.tickUpper(),
+                liquidity
+            );
 
         // check price slippage with the amounts provided
         require(
@@ -265,13 +269,13 @@ contract V3Aggregator is IUniswapV3MintCallback {
             IERC20(pool.token1()).transfer(msg.sender, amount1Real);
         }
 
-        RemoveLiquidity(_strategy, amount0Real, amount1Real);
+        emit RemoveLiquidity(_strategy, amount0Real, amount1Real);
     }
 
-    /*
-     * @notice Rebalances the pool to new ranges
-     * @param _strategy Address of the strategy
-     */
+    /// @notice Rebalances the pool to new ranges
+    /// @param _strategy Address of the strategy
+    // TODO: Put the remaining liquidity in limit order
+    // TODO: Add an option to remove and hold the liquidity
     function rebalance(address _strategy)
         external
         returns (uint256 amount0, uint256 amount1)
@@ -283,38 +287,97 @@ contract V3Aggregator is IUniswapV3MintCallback {
         // add blacklisting check
         require(!blacklisted[_strategy], "blacklisted");
 
-        // // TODO: Store past liquidity
-        uint128 oldLiquidity =
-            getCurrentLiquidity(
-                strategy.pool(),
-                oldStrategy.tickLower,
-                oldStrategy.tickUpper
-            );
+        uint128 liquidity;
 
-        // burn liquidity
-        (uint256 owed0, uint256 owed1) =
-            pool.burn(
-                oldStrategy.tickLower,
-                oldStrategy.tickUpper,
-                oldLiquidity
+        if (strategy.hold()) {
+            (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
+            Hold storage newHold = holds[_strategy];
+            newHold.amount0 = amount0;
+            newHold.amount1 = amount1;
+        } else if (oldStrategy.hold) {
+            Hold storage oldHold = holds[_strategy];
+            amount0 = oldHold.amount0;
+            amount1 = oldHold.amount1;
+            liquidity = getLiquidityForAmounts(
+                address(pool),
+                strategy.tickLower(),
+                strategy.tickUpper(),
+                amount0,
+                amount1
             );
+            redeploy(_strategy, amount0, amount1, liquidity);
+        } else {
+            (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
+            redeploy(_strategy, amount0, amount1, liquidity);
+        }
+    }
 
-        // collect fees
-        (uint128 collect0, uint128 collect1) =
-            pool.collect(
-                address(this),
-                oldStrategy.tickLower,
-                oldStrategy.tickUpper,
-                type(uint128).max,
-                type(uint128).max
-            );
+    function redeploy(
+        address _strategy,
+        uint256 _amount0,
+        uint256 _amount1,
+        uint128 _oldLiquidity
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+        Strategy storage oldStrategy = strategies[_strategy];
 
         // calculate current liquidity
         uint128 liquidity =
-            getLiquidityForAmounts(_strategy, collect0, collect1);
+            getLiquidityForAmounts(
+                address(pool),
+                strategy.tickLower(),
+                strategy.tickUpper(),
+                _amount0,
+                _amount1
+            );
 
         // mint liquidity
-        mintLiquidity(_strategy, liquidity, true);
+        mintLiquidity(
+            address(pool),
+            strategy.tickLower(),
+            strategy.tickUpper(),
+            liquidity,
+            address(this)
+        );
+
+        uint128 unusedLiquidity =
+            _oldLiquidity > liquidity
+                ? _oldLiquidity - liquidity
+                : liquidity - _oldLiquidity;
+
+        // calculate pending amount0 and amount1
+        (amount0, amount1) = getAmountsForLiquidity(
+            address(pool),
+            oldStrategy.tickLower,
+            oldStrategy.tickUpper,
+            unusedLiquidity
+        );
+
+        if (strategy.swap()) {
+            // swap the tokens
+        } else {
+            if (
+                strategy.secondaryTickLower() != 0 &&
+                strategy.secondaryTickUpper() != 0
+            ) {
+                uint128 secondaryLiquidity =
+                    getLiquidityForAmounts(
+                        address(this),
+                        strategy.secondaryTickLower(),
+                        strategy.secondaryTickUpper(),
+                        amount0,
+                        amount1
+                    );
+                mintLiquidity(
+                    address(pool),
+                    strategy.secondaryTickLower(),
+                    strategy.secondaryTickUpper(),
+                    secondaryLiquidity,
+                    address(this)
+                );
+            }
+        }
 
         // update strategy
         updateStrategyData(_strategy);
@@ -327,6 +390,118 @@ contract V3Aggregator is IUniswapV3MintCallback {
             strategy.tickLower(),
             strategy.tickUpper()
         );
+    }
+
+    /// @notice Mints liquidity from V3 Pool
+    /// @param _pool Address of the pool
+    /// @param _tickLower Lower tick
+    /// @param _tickUpper Upper tick
+    /// @param _liquidity Liquidity to mint
+    /// @param _payer Address which is adding the liquidity
+    function mintLiquidity(
+        address _pool,
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _liquidity,
+        address _payer
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+
+        // add liquidity to Uniswap pool
+        (amount0, amount1) = pool.mint(
+            address(this),
+            _tickLower,
+            _tickUpper,
+            _liquidity,
+            abi.encode(MintCallbackData({payer: _payer, pool: _pool}))
+        );
+    }
+
+    /// @notice Burns liquidity in the given range
+    /// @param _pool Address of the pool
+    /// @param _strategy Address of the strategy
+    /// @param _tickLower Lower Tick
+    /// @param _tickUpper Upper Tick
+    function burnLiquidity(
+        address _pool,
+        address _strategy,
+        int24 _tickLower,
+        int24 _tickUpper
+    )
+        internal
+        returns (
+            uint256 collect0,
+            uint256 collect1,
+            uint128 liquidity
+        )
+    {
+        // calculate current liquidity
+        liquidity = getCurrentLiquidity(_pool, _tickLower, _tickUpper);
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+        // burn liquidity
+        (uint256 owed0, uint256 owed1) =
+            pool.burn(_tickLower, _tickUpper, liquidity);
+
+        // collect fees
+        (collect0, collect1) = pool.collect(
+            address(this),
+            _tickLower,
+            _tickUpper,
+            type(uint128).max,
+            type(uint128).max
+        );
+
+        emit FeesClaimed(
+            _strategy,
+            _pool,
+            uint256(collect0) - owed0,
+            uint256(collect1) - owed1
+        );
+    }
+
+    /// @notice Burns all the liquidity and collects fees
+    /// @param _strategy Address of the strategy
+    function burnAllLiquidity(address _strategy)
+        internal
+        returns (
+            uint256 amount0,
+            uint256 amount1,
+            uint128 liquidity
+        )
+    {
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+        Strategy storage oldStrategy = strategies[_strategy];
+
+        // Burn liquidity for range order
+        (uint256 rangeAmount0, uint256 rangeAmount1, uint128 rangeLiquidity) =
+            burnLiquidity(
+                address(pool),
+                address(strategy),
+                oldStrategy.tickLower,
+                oldStrategy.tickUpper
+            );
+
+        uint256 limitAmount0;
+        uint256 limitAmount1;
+        uint128 limitLiquidity;
+
+        if (
+            oldStrategy.secondaryTickLower != 0 &&
+            oldStrategy.secondaryTickUpper != 0
+        ) {
+            // Burn liquidity for limit order
+            (limitAmount0, limitAmount1, limitLiquidity) = burnLiquidity(
+                address(pool),
+                address(strategy),
+                oldStrategy.secondaryTickLower,
+                oldStrategy.secondaryTickUpper
+            );
+        }
+
+        liquidity = rangeLiquidity + limitLiquidity;
+        amount0 = rangeAmount0 + limitAmount0;
+        amount1 = rangeAmount1 + limitAmount1;
     }
 
     /// @dev Callback for Uniswap V3 pool.
@@ -371,12 +546,10 @@ contract V3Aggregator is IUniswapV3MintCallback {
         }
     }
 
-    /*
-     * @notice Updates the shares of the user
-     * @param _strategy Address of the strategy
-     * @param _shares amount of shares user wants to burn
-     * @param _to address where shares should be issued
-     */
+    /// @notice Updates the shares of the user
+    /// @param _strategy Address of the strategy
+    /// @param _shares amount of shares user wants to burn
+    /// @param _to address where shares should be issued
     function issueShare(
         address _strategy,
         uint256 _shares,
@@ -390,11 +563,9 @@ contract V3Aggregator is IUniswapV3MintCallback {
         emit MintShare(_strategy, _to, _shares);
     }
 
-    /*
-     * @notice Burns the share of the user
-     * @param _strategy Address of the strategy
-     * @param _shares amount of shares user wants to burn
-     */
+    /// @notice Burns the share of the user
+    /// @param _strategy Address of the strategy
+    /// @param _shares amount of shares user wants to burn
     function burnShare(address _strategy, uint256 _shares) internal {
         // update shares
         shares[_strategy][msg.sender] = shares[_strategy][msg.sender].sub(
@@ -405,73 +576,64 @@ contract V3Aggregator is IUniswapV3MintCallback {
         emit BurnShare(_strategy, msg.sender, _shares);
     }
 
-    /*
-     * @notice Calculates the liquidity amount using current ranges
-     * @param _strategy Address of the strategy
-     * @param _amount0 Amount to be added for token0
-     * @param _amount1 Amount to be added for token1
-     * @return liquidity Liquidity amount derived from token amounts
-     */
+    /// @notice Calculates the liquidity amount using current ranges
+    /// @param _pool Pool address
+    /// @param _tickLower Lower tick
+    /// @param _tickUpper Upper tick
+    /// @param _amount0 Amount to be added for token0
+    /// @param _amount1 Amount to be added for token1
+    /// @return liquidity Liquidity amount derived from token amounts
     function getLiquidityForAmounts(
-        address _strategy,
+        address _pool,
+        int24 _tickLower,
+        int24 _tickUpper,
         uint256 _amount0,
         uint256 _amount1
     ) internal view returns (uint128 liquidity) {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         // get sqrtRatios required to calculate liquidity
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint160 sqrtRatioAX96 =
-            TickMath.getSqrtRatioAtTick(strategy.tickLower());
-        uint160 sqrtRatioBX96 =
-            TickMath.getSqrtRatioAtTick(strategy.tickUpper());
 
         // calculate liquidity needs to be added
         liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtRatioX96,
-            sqrtRatioAX96,
-            sqrtRatioBX96,
+            TickMath.getSqrtRatioAtTick(_tickLower),
+            TickMath.getSqrtRatioAtTick(_tickUpper),
             _amount0,
             _amount1
         );
     }
 
-    /*
-     * @notice Calculates the liquidity amount using current ranges
-     * @param _strategy Address of the strategy
-     * @param _liquidity Liquidity of the pool
-     */
-    function getAmountsForLiquidity(address _strategy, uint128 _liquidity)
-        internal
-        view
-        returns (uint256 amount0, uint256 amount1)
-    {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+    /// @notice Calculates the liquidity amount using current ranges
+    /// @param _pool Address of the pool
+    /// @param _tickLower Lower tick
+    /// @param _tickUpper Upper tick
+    /// @param _liquidity Liquidity of the pool
+    function getAmountsForLiquidity(
+        address _pool,
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _liquidity
+    ) internal view returns (uint256 amount0, uint256 amount1) {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         // get sqrtRatios required to calculate liquidity
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint160 sqrtRatioAX96 =
-            TickMath.getSqrtRatioAtTick(strategy.tickLower());
-        uint160 sqrtRatioBX96 =
-            TickMath.getSqrtRatioAtTick(strategy.tickUpper());
 
         // calculate liquidity needs to be added
         (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
             sqrtRatioX96,
-            sqrtRatioAX96,
-            sqrtRatioBX96,
+            TickMath.getSqrtRatioAtTick(_tickLower),
+            TickMath.getSqrtRatioAtTick(_tickUpper),
             _liquidity
         );
     }
 
-    /*
-     * @dev Get the liquidity between current ticks
-     * @param _strategy Strategy address
-     * @param _tickLower Lower tick of the range
-     * @param _tickUpper Upper tick of the range
-     */
+    /// @dev Get the liquidity between current ticks
+    /// @param _pool Address of the pool
+    /// @param _tickLower Lower tick of the range
+    /// @param _tickUpper Upper tick of the range
     function getCurrentLiquidity(
         address _pool,
         int24 _tickLower,
@@ -483,10 +645,8 @@ contract V3Aggregator is IUniswapV3MintCallback {
         );
     }
 
-    /*
-     * @dev Updates strategy data for future use
-     * @param _stategy Address of the strategy
-     */
+    /// @dev Updates strategy data for future use
+    /// @param _strategy Address of the strategy
     function updateStrategyData(address _strategy) internal {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         Strategy storage newStrategy = strategies[_strategy];
@@ -496,22 +656,20 @@ contract V3Aggregator is IUniswapV3MintCallback {
         ) {
             newStrategy.tickLower = strategy.tickLower();
             newStrategy.tickUpper = strategy.tickUpper();
+            newStrategy.secondaryTickLower = strategy.secondaryTickLower();
+            newStrategy.secondaryTickUpper = strategy.secondaryTickLower();
         }
     }
 
-    /*
-     * @dev Change the fee setter's address
-     * @param _feeSetter New feeSetter address
-     */
+    /// @dev Change the fee setter's address
+    /// @param _feeSetter New feeSetter address
     function changeFeeSetter(address _feeSetter) external {
         require(msg.sender == _feeSetter);
         feeSetter = _feeSetter;
     }
 
-    /*
-     * @dev Change fee receiver
-     * @param _feeTo New fee receiver
-     */
+    /// @dev Change fee receiver
+    /// @param _feeTo New fee receiver
     function changeFeeTo(address _feeTo) external {
         require(msg.sender == feeSetter);
         feeTo = _feeTo;

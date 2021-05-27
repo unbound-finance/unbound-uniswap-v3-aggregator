@@ -6,19 +6,16 @@ import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-
 contract TestStrategy {
-
-    uint256 public range0;
-    uint256 public range1;
-
     int24 public tickLower;
     int24 public tickUpper;
+    int24 public secondaryTickLower;
+    int24 public secondaryTickUpper;
 
     address public pool;
-    address public stablecoin;
-
     uint256 public fee;
+    bool public swap;
+    bool public hold;
 
     constructor(
         uint256 _range0,
@@ -29,36 +26,31 @@ contract TestStrategy {
         address _stablecoin,
         uint256 _fee
     ) {
-        range0 = _range0;
-        range1 = _range1;
         tickLower = _tickLower;
         tickUpper = _tickUpper;
         pool = _pool;
-        stablecoin = _stablecoin;
+        swap = false;
     }
 
-
-    function changeTicks(int24 _newTickLower, int24 _newTickUpper) external{
+    function changeTicks(
+        int24 _newTickLower,
+        int24 _newTickUpper,
+        int24 _newSecondaryTickLower,
+        int24 _newSecondaryTickUpper,
+        bool _swap
+    ) external {
         tickLower = _newTickLower;
         tickUpper = _newTickUpper;
+        secondaryTickLower = _newSecondaryTickLower;
+        secondaryTickUpper = _newSecondaryTickUpper;
+        swap = _swap;
     }
 
-    function changeRange0(uint256 _newRange) public {
-        range0 = _newRange;
-    }
-
-
-    function changeRange1(uint256 _newRange) public {
-        range0 = _newRange;
-    }
-
-
-    function changeTickLower(int24 _tickLower) public {
-        tickLower = _tickLower;
-    }
-
-
-    function changeTickUpper(int24 _tickUpper) public {
-        tickUpper = _tickUpper;
+    function holdFunds() public{
+        tickLower = 0;
+        tickUpper = 0;
+        secondaryTickLower = 0;
+        secondaryTickUpper = 0;
+        swap = false;
     }
 }
