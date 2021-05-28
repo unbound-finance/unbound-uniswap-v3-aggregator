@@ -137,7 +137,7 @@ contract V3Aggregator is IUniswapV3MintCallback {
 
         uint128 liquidityBefore =
             getCurrentLiquidity(
-                address(pool),
+                strategy.pool(),
                 strategy.tickLower(),
                 strategy.tickUpper()
             );
