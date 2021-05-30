@@ -1,22 +1,23 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.7.6;
 
-// TODO: Move to different file
 interface IUnboundStrategy {
-
     function pool() external view returns (address);
 
     function tickLower() external view returns (int24);
 
     function tickUpper() external view returns (int24);
 
-    function swap() external view returns(bool);
+    function swapAmount() external view returns (int256);
+    function zeroToOne() external view returns (bool);
+    function allowedSlippage() external view returns (uint160);
 
-    function hold() external view returns(bool);
+    // TODO: Add hold and swap
+    function hold() external view returns (bool);
 
-    function secondaryTickUpper() external view returns(int24);
-    
-    function secondaryTickLower() external view returns(int24);
+    function secondaryTickUpper() external view returns (int24);
+
+    function secondaryTickLower() external view returns (int24);
 
     function fee() external view returns (uint256);
 }

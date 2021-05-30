@@ -14,22 +14,26 @@ contract TestStrategy {
 
     address public pool;
     uint256 public fee;
-    bool public swap;
+
+    uint256 public swapAmount;
+    uint160 public allowedSlippage;
+    bool public zeroToOne;
+
     bool public hold;
 
     constructor(
-        uint256 _range0,
-        uint256 _range1,
         int24 _tickLower,
         int24 _tickUpper,
+        int24 _secondaryTickLower,
+        int24 _secondaryTickUpper,
         address _pool,
-        address _stablecoin,
         uint256 _fee
     ) {
         tickLower = _tickLower;
         tickUpper = _tickUpper;
+        secondaryTickLower = _secondaryTickLower;
+        secondaryTickUpper = _secondaryTickUpper;
         pool = _pool;
-        swap = false;
     }
 
     function changeTicks(
@@ -37,20 +41,37 @@ contract TestStrategy {
         int24 _newTickUpper,
         int24 _newSecondaryTickLower,
         int24 _newSecondaryTickUpper,
-        bool _swap
+        uint256 _swapAmount
     ) external {
         tickLower = _newTickLower;
         tickUpper = _newTickUpper;
         secondaryTickLower = _newSecondaryTickLower;
         secondaryTickUpper = _newSecondaryTickUpper;
-        swap = _swap;
+        swapAmount = _swapAmount;
+        if (swapAmount == 0) {
+            swapAmount = 0;
+        }
     }
 
-    function holdFunds() public{
+    function swapFunds(
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint256 _swapAmount,
+        uint160 _allowedSlippage,
+        bool _zeroToOne
+    ) public {
+        tickLower = _tickLower;
+        tickUpper = _tickUpper;
+        swapAmount = _swapAmount;
+        allowedSlippage = _allowedSlippage;
+        zeroToOne = _zeroToOne;
+    }
+
+    function holdFunds() public {
         tickLower = 0;
         tickUpper = 0;
         secondaryTickLower = 0;
         secondaryTickUpper = 0;
-        swap = false;
+        hold = true;
     }
 }

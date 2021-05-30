@@ -27,6 +27,8 @@ import './interfaces/callback/IUniswapV3MintCallback.sol';
 import './interfaces/callback/IUniswapV3SwapCallback.sol';
 import './interfaces/callback/IUniswapV3FlashCallback.sol';
 
+import "hardhat/console.sol";
+
 contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     using LowGasSafeMath for uint256;
     using LowGasSafeMath for int256;
@@ -626,6 +628,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
         bool exactInput = amountSpecified > 0;
 
+        // console.log("exactInput",exactInput);
+
         SwapState memory state =
             SwapState({
                 amountSpecifiedRemaining: amountSpecified,
@@ -670,6 +674,14 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
                 fee
             );
 
+
+            // console.log("calling from v3 pool");
+            // console.log("state.amountCalculated", uint256(state.amountCalculated));
+            // console.log("state.amountSpecifiedRemaining", uint256(state.amountSpecifiedRemaining));
+            // console.log("state.amountOut", uint256(step.amountOut.toInt256()));
+            // console.log("differemce", uint256(state.amountCalculated.sub(step.amountOut.toInt256())));
+            // console.log("addition", uint256(state.amountCalculated.add((step.amountIn + step.feeAmount).toInt256())));
+
             if (exactInput) {
                 state.amountSpecifiedRemaining -= (step.amountIn + step.feeAmount).toInt256();
                 state.amountCalculated = state.amountCalculated.sub(step.amountOut.toInt256());
@@ -677,6 +689,9 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
                 state.amountSpecifiedRemaining += step.amountOut.toInt256();
                 state.amountCalculated = state.amountCalculated.add((step.amountIn + step.feeAmount).toInt256());
             }
+
+            // console.log("calling from v3 pool");
+            // console.log("state.amountCalculated", uint256(state.amountCalculated));
 
             // if the protocol fee is on, calculate how much is owed, decrement feeAmount, and increment protocolFee
             if (cache.feeProtocol > 0) {
@@ -729,6 +744,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             }
         }
 
+
+
         // update tick and write an oracle entry if the tick change
         if (state.tick != slot0Start.tick) {
             (uint16 observationIndex, uint16 observationCardinality) =
@@ -763,6 +780,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             feeGrowthGlobal1X128 = state.feeGrowthGlobalX128;
             if (state.protocolFee > 0) protocolFees.token1 += state.protocolFee;
         }
+
+
 
         (amount0, amount1) = zeroForOne == exactInput
             ? (amountSpecified - state.amountSpecifiedRemaining, state.amountCalculated)
