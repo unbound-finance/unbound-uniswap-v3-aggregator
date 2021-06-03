@@ -290,12 +290,12 @@ describe("V3Aggregator", function () {
       v3Aggregator.address
     );
 
-    const getAmountsForLiquidity = await v3Aggregator.getAmountsForLiquidity(
-      pool.address,
-      newTickLower,
-      newTickUpper,
-      "32208242666285621817165"
-    );
+    // const getAmountsForLiquidity = await v3Aggregator.getAmountsForLiquidity(
+    //   pool.address,
+    //   newTickLower,
+    //   newTickUpper,
+    //   "32208242666285621817165"
+    // );
 
     
     console.log({
@@ -303,7 +303,7 @@ describe("V3Aggregator", function () {
       newTickUpper,
       tickUpper,
       tickLower,
-      getAmountsForLiquidity: getAmountsForLiquidity.toString(),
+      // getAmountsForLiquidity: getAmountsForLiquidity.toString(),
       poolBalAfter0: poolBalAfter0.toString(),
       poolBalAfter1: poolBalAfter1.toString(),
     });

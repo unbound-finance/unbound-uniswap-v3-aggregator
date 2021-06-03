@@ -1,5 +1,7 @@
 pragma solidity ^0.7.6;
 
+// TODO: Add events on each interaction
+
 contract AggregatorBase {
     // to update protocol fees
     address public governance;
