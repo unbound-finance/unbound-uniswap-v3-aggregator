@@ -2,6 +2,10 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
+// import base contracts
+import "./base/AggregatorBase.sol";
+import "./base/AggregatorManagement.sol";
+
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
@@ -23,11 +27,14 @@ import "hardhat/console.sol";
 
 // TODO: Add Reentrancy guard
 // TODO: Add Pausable functionality
-// TODO: Remove liquidity partially
-// TODO: Store unused balances and give percentage from it for specific strategy
 // TODO: Implement fees for strategy owner
 
-contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
+contract V3Aggregator is
+    AggregatorBase,
+    AggregatorManagement,
+    IUniswapV3MintCallback,
+    IUniswapV3SwapCallback
+{
     using SafeMath for uint256;
     using SafeCast for uint256;
 
@@ -42,18 +49,6 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         address indexed strategy,
         uint256 amount0,
         uint256 amount1
-    );
-
-    event MintShare(
-        address indexed strategy,
-        address indexed user,
-        uint256 amount
-    );
-
-    event BurnShare(
-        address indexed strategy,
-        address indexed user,
-        uint256 amount
     );
 
     event FeesClaimed(
@@ -72,14 +67,6 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         int24 tickUpper
     );
 
-    // store total stake points
-    uint256 public totalShare;
-
-    mapping(address => mapping(address => uint256)) public shares;
-
-    // mapping of strategies with their total share
-    mapping(address => uint256) totalShares;
-
     struct MintCallbackData {
         address payer;
         address pool;
@@ -91,8 +78,8 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
     }
 
     struct Strategy {
-        uint256 amount0;
-        uint256 amount1;
+        uint256 amount0; // used amount0
+        uint256 amount1; // used amount1
         uint256 secondaryAmount0;
         uint256 secondaryAmount1;
         int24 tickLower;
@@ -105,27 +92,8 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
 
     mapping(address => Strategy) public strategies;
 
-    // mapping of blacklisted strategies
-    mapping(address => bool) public blacklisted;
-
-    struct UnusedAmounts {
-        uint256 amount0;
-        uint256 amount1;
-    }
-    // hold
-    mapping(address => UnusedAmounts) public unused;
-
-    // to update protocol fees
-    address public feeSetter;
-
-    // to receive the fees
-    address public feeTo;
-
-    // protocol fees, 1e8 is 100%
-    uint256 public PROTOCOL_FEE;
-
-    constructor(address _feeSetter) {
-        feeSetter = _feeSetter;
+    constructor(address _governance) {
+        governance = _governance;
         feeTo = address(0);
     }
 
@@ -151,12 +119,18 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
     {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+        Strategy storage oldStrategy = strategies[_strategy];
+
+        console.log("amount0", _amount0);
+        console.log("amount1", _amount1);
 
         uint128 liquidityBefore =
             getCurrentLiquidity(
                 address(pool),
                 strategy.tickLower(),
-                strategy.tickUpper()
+                strategy.tickUpper(),
+                strategy.secondaryTickLower(),
+                strategy.secondaryTickUpper()
             );
 
         uint128 liquidity =
@@ -181,37 +155,32 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
             getCurrentLiquidity(
                 address(pool),
                 strategy.tickLower(),
-                strategy.tickUpper()
+                strategy.tickUpper(),
+                strategy.secondaryTickLower(),
+                strategy.secondaryTickUpper()
             );
 
-        // calculate shares
-        // TODO: Replace liquidity with liquidityBefore
-        share = uint256(liquidityAfter)
-            .sub(liquidity)
-            .mul(totalShare)
-            .div(liquidity)
-            .add(1000);
-
-        if (feeTo != address(0)) {
-            uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
-            // issue fee
-            issueShare(_strategy, fee, feeTo);
-            // issue shares
-            issueShare(_strategy, share.sub(fee), msg.sender);
-        } else {
-            // update shares w.r.t. strategy
-            issueShare(_strategy, share, msg.sender);
-        }
-
+        share = issueShare(
+            _strategy,
+            liquidityAfter,
+            liquidity,
+            msg.sender
+        );
         // price slippage check
         require(
             amount0 >= _amount0Min && amount1 >= _amount1Min,
             "Aggregator: Slippage"
         );
 
-        updateStrategy(_strategy, amount0, amount1, 0, 0);
-
         emit AddLiquidity(_strategy, amount0, amount1);
+
+        amount0 = amount0 + oldStrategy.amount0;
+        amount1 = amount1 + oldStrategy.amount1;
+
+        console.log("add liquidity amount0", amount0);
+        console.log("add liqudiity amount1", amount1);
+
+        updateStrategy(_strategy, amount0, amount1, 0, 0);
     }
 
     /// @notice Removes liquidity from the pool
@@ -228,17 +197,15 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         require(shares[_strategy][msg.sender] >= _shares, "insuffcient shares");
-        
-        // 0. Removes liquidity from range order
-        // 1. Removes liquidity from limit order
-        // 2. Removes liquidity from unused liquidity
 
         // ccalculate current
         uint128 currentLiquidity =
             getCurrentLiquidity(
                 address(pool),
                 strategy.tickLower(),
-                strategy.tickUpper()
+                strategy.tickUpper(),
+                strategy.secondaryTickLower(),
+                strategy.secondaryTickUpper()
             );
 
         // calculate current liquidity
@@ -344,8 +311,14 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
             // decrease unused amounts
             decreaseUnusedAmounts(_strategy, newAmount0, newAmount1);
         } else {
+            (amount0, amount1) = getUnusedAmounts(_strategy);
+
             // remove all the liquidity
             (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
+
+            console.log("removed liquidity");
+            console.log(amount0);
+            console.log(amount1);
 
             // redploy the liquidity
             (newAmount0, newAmount1) = redeploy(
@@ -354,17 +327,6 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
                 amount1,
                 liquidity
             );
-
-            // calculate unused amounts
-            amount0 = amount0 > newAmount0
-                ? amount0 - newAmount0
-                : newAmount0 - amount0;
-            amount1 = amount1 > newAmount1
-                ? amount1 - newAmount1
-                : newAmount1 - amount1;
-
-            // increase amounts
-            updateUnusedAmounts(_strategy, amount0, amount1);
         }
     }
 
@@ -387,26 +349,78 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         uint256 secondaryAmount1;
 
         if (strategy.swapAmount() > 0) {
+            // don't let strategy owner swap more than they manage
+            if (strategy.zeroToOne()) {
+                require(
+                    uint256(strategy.swapAmount()) <=
+                        newStrategy.amount0.add(newStrategy.secondaryAmount0)
+                );
+            } else {
+                require(
+                    uint256(strategy.swapAmount()) <=
+                        newStrategy.amount1.add(newStrategy.secondaryAmount1)
+                );
+            }
+
+            uint256 amountOut;
+
+            console.log("swap Amount", uint256(strategy.swapAmount()));
+
             // swap tokens
-            swap(
+            (amountOut) = swap(
                 address(pool),
                 strategy.zeroToOne(),
                 strategy.swapAmount(),
                 strategy.allowedSlippage()
             );
 
-            // mint liquidity after swap
-            (amount0, amount1) = mintLiquidity(
+            console.log("amount supposed to be deployed");
+            console.log("amount0", _amount0);
+            console.log("amount1", _amount1);
+
+            console.log("amount swapped", amountOut);
+
+            // update mint liquidity variables according to swap amounts
+            if (strategy.zeroToOne()) {
+                amount0 = _amount0 - uint256(strategy.swapAmount());
+                amount1 = _amount1 + amountOut;
+            } else {
+                amount0 = _amount0 + amountOut;
+                amount1 = _amount1 - uint256(strategy.swapAmount());
+            }
+
+            console.log("amounts being deployed");
+            console.log("amount0", amount0);
+            console.log("amount1", amount1);
+
+            // the amount going in mint liquidity should be influenced by swap amount;
+            (secondaryAmount0, secondaryAmount1) = mintLiquidity(
                 address(pool),
                 strategy.tickLower(),
                 strategy.tickUpper(),
-                _amount0,
-                _amount1,
+                amount0,
+                amount1,
                 address(this)
             );
+
+            console.log("amounts deployed");
+            console.log("amount0", secondaryAmount0);
+            console.log("amount1", secondaryAmount1);
+
+            // unused amounts
+            amount0 = amount0 - secondaryAmount0;
+            amount1 = amount1 - secondaryAmount1;
+
             // update strategy
             updateStrategy(_strategy, amount0, amount1, 0, 0);
+
+            // update unused amounts
+            updateUnusedAmounts(_strategy, amount0, amount1);
         } else {
+            console.log("redeploying without swap");
+            console.log(_amount0);
+            console.log(_amount1);
+
             // mint liquidity in range order
             (amount0, amount1) = mintLiquidity(
                 address(pool),
@@ -434,7 +448,7 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
                     secondaryAmount0 = _amount0 - amount0;
                     secondaryAmount1 = _amount1 - amount1;
 
-                    mintLiquidity(
+                    (secondaryAmount0, secondaryAmount1) = mintLiquidity(
                         address(pool),
                         strategy.secondaryTickLower(),
                         strategy.secondaryTickUpper(),
@@ -442,8 +456,18 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
                         secondaryAmount1,
                         address(this)
                     );
+
+                    amount0 = amount0 + secondaryAmount0;
+                    amount1 = amount1 + secondaryAmount1;
                 }
             }
+
+            // to calculate unused amount substract the deployed amounts from original amounts
+            amount0 = _amount0 - amount0;
+            amount1 = _amount1 - amount1;
+
+            // update unused amounts
+            updateUnusedAmounts(_strategy, amount0, amount1);
 
             // update strategy
             updateStrategy(
@@ -491,6 +515,7 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
                 _amount0,
                 _amount1
             );
+
         // add liquidity to Uniswap pool
         (amount0, amount1) = pool.mint(
             address(this),
@@ -523,9 +548,7 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
             uint128 liquidity
         )
     {
-
         // calculate current liquidity
-        // liquidity = getCurrentLiquidity(_pool, _tickLower, _tickUpper);
         liquidity = getLiquidityForAmounts(
             _pool,
             _tickLower,
@@ -533,6 +556,9 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
             _amount0,
             _amount1
         );
+
+        console.log("liquidity value", liquidity);
+
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         uint256 owed0;
@@ -574,6 +600,11 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage oldStrategy = strategies[_strategy];
 
+        console.log("burn liquidity amount0", oldStrategy.amount0);
+        console.log("burn liquidity amount1", oldStrategy.amount1);
+        console.log("old tick lower", uint256(oldStrategy.tickLower));
+        console.log("old tick lower", uint256(oldStrategy.tickUpper));
+
         // Burn liquidity for range order
         (uint256 rangeAmount0, uint256 rangeAmount1, uint128 rangeLiquidity) =
             burnLiquidity(
@@ -609,15 +640,18 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         amount1 = rangeAmount1 + limitAmount1;
     }
 
+    // swaps with exact input single functionality
     function swap(
         address _pool,
         bool _zeroToOne,
         int256 _amount,
         uint160 _allowedSlippage
-    ) internal returns (int256 amount0, int256 amount1) {
+    ) internal returns (uint256 amountOut) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+
+        console.log("sqroot price", sqrtRatioX96);
 
         // TODO: Support partial slippage
         uint160 sqrtPriceLimitX96 =
@@ -625,15 +659,35 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
                 ? sqrtRatioX96 - (sqrtRatioX96 * _allowedSlippage) / 100
                 : sqrtRatioX96 + (sqrtRatioX96 * _allowedSlippage) / 100;
 
-        (amount0, amount1) = pool.swap(
-            address(this),
+        (amountOut) = swapExactInput(
+            _pool,
             _zeroToOne,
             _amount,
-            sqrtPriceLimitX96,
-            abi.encode(
-                SwapCallbackData({pool: address(pool), zeroToOne: _zeroToOne})
-            )
+            sqrtPriceLimitX96
         );
+    }
+
+    // TODO: If on hold in add liquidity add to hold
+    function swapExactInput(
+        address _pool,
+        bool _zeroToOne,
+        int256 _amount,
+        uint160 sqrtPriceLimitX96
+    ) internal returns (uint256 amountOut) {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+
+        (int256 amount0, int256 amount1) =
+            pool.swap(
+                address(this),
+                _zeroToOne,
+                _amount,
+                sqrtPriceLimitX96,
+                abi.encode(
+                    SwapCallbackData({pool: _pool, zeroToOne: _zeroToOne})
+                )
+            );
+
+        return uint256(-(_zeroToOne ? amount1 : amount0));
     }
 
     /// @dev Callback for Uniswap V3 pool.
@@ -645,7 +699,7 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         SwapCallbackData memory decoded = abi.decode(data, (SwapCallbackData));
 
         uint256 amt0 = uint256(amount0);
-        uint256 amt1 = uint256(amount1 * -1);
+        uint256 amt1 = uint256(-amount1);
 
         // check if the callback is received from Uniswap V3 Pool
         require(msg.sender == address(decoded.pool));
@@ -660,7 +714,7 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
             );
         } else {
             TransferHelper.safeTransfer(
-                pool.token0(),
+                pool.token1(),
                 msg.sender,
                 uint256(amount1)
             );
@@ -709,75 +763,6 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         }
     }
 
-    function increaseUnusedAmounts(
-        address _strategy,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        UnusedAmounts storage unusedAmounts = unused[_strategy];
-        unusedAmounts.amount0 = unusedAmounts.amount0.add(_amount0);
-        unusedAmounts.amount1 = unusedAmounts.amount1.add(_amount1);
-    }
-
-    function updateUnusedAmounts(
-        address _strategy,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        UnusedAmounts storage unusedAmounts = unused[_strategy];
-        unusedAmounts.amount0 = _amount0;
-        unusedAmounts.amount1 = _amount1;
-    }
-
-    function decreaseUnusedAmounts(
-        address _strategy,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        UnusedAmounts storage unusedAmounts = unused[_strategy];
-        unusedAmounts.amount0 = unusedAmounts.amount0.add(_amount0);
-        unusedAmounts.amount1 = unusedAmounts.amount1.add(_amount1);
-    }
-
-    function getUnusedAmounts(address _strategy)
-        internal
-        returns (uint256 amount0, uint256 amount1)
-    {
-        UnusedAmounts storage unusedAmounts = unused[_strategy];
-        amount0 = unusedAmounts.amount0;
-        amount1 = unusedAmounts.amount1;
-    }
-
-    /// @notice Updates the shares of the user
-    /// @param _strategy Address of the strategy
-    /// @param _shares amount of shares user wants to burn
-    /// @param _to address where shares should be issued
-    function issueShare(
-        address _strategy,
-        uint256 _shares,
-        address _to
-    ) internal {
-        // update shares
-        shares[_strategy][_to] = shares[_strategy][_to].add(uint256(_shares));
-        // update total shares
-        totalShares[_strategy] = totalShares[_strategy].add(_shares);
-        // emit event
-        emit MintShare(_strategy, _to, _shares);
-    }
-
-    /// @notice Burns the share of the user
-    /// @param _strategy Address of the strategy
-    /// @param _shares amount of shares user wants to burn
-    function burnShare(address _strategy, uint256 _shares) internal {
-        // update shares
-        shares[_strategy][msg.sender] = shares[_strategy][msg.sender].sub(
-            uint256(_shares)
-        );
-        // update total shares
-        totalShares[_strategy] = totalShares[_strategy].sub(_shares);
-        emit BurnShare(_strategy, msg.sender, _shares);
-    }
-
     /// @notice Calculates the liquidity amount using current ranges
     /// @param _pool Pool address
     /// @param _tickLower Lower tick
@@ -795,6 +780,8 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
         // get sqrtRatios required to calculate liquidity
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+
+        console.log("sqrtRatioX96", sqrtRatioX96);
 
         // calculate liquidity needs to be added
         liquidity = LiquidityAmounts.getLiquidityForAmounts(
@@ -816,7 +803,7 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         int24 _tickLower,
         int24 _tickUpper,
         uint128 _liquidity
-    ) internal view returns (uint256 amount0, uint256 amount1) {
+    ) external view returns (uint256 amount0, uint256 amount1) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         // get sqrtRatios required to calculate liquidity
@@ -831,6 +818,8 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         );
     }
 
+    // TODO: Change temporary external external functions to internal
+    // TODO: Consider liquidity only from the strategy in it
     /// @dev Get the liquidity between current ticks
     /// @param _pool Address of the pool
     /// @param _tickLower Lower tick of the range
@@ -838,12 +827,30 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
     function getCurrentLiquidity(
         address _pool,
         int24 _tickLower,
-        int24 _tickUpper
+        int24 _tickUpper,
+        int24 _secondaryTickLower,
+        int24 _secondaryTickUpper
     ) internal view returns (uint128 liquidity) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-        (liquidity, , , , ) = pool.positions(
-            PositionKey.compute(address(this), _tickLower, _tickUpper)
-        );
+
+        // get current liquidity for range order
+        (uint128 rangeOrderLiquidity, , , , ) =
+            pool.positions(
+                PositionKey.compute(address(this), _tickLower, _tickUpper)
+            );
+
+        // get current liquidity for limit order
+        (uint128 limitOrderLiquidity, , , , ) =
+            pool.positions(
+                PositionKey.compute(
+                    address(this),
+                    _secondaryTickLower,
+                    _secondaryTickUpper
+                )
+            );
+
+        // add both liquiditys
+        liquidity = rangeOrderLiquidity + limitOrderLiquidity;
     }
 
     /// @dev Updates strategy data for future use
@@ -868,24 +875,5 @@ contract V3Aggregator is IUniswapV3MintCallback, IUniswapV3SwapCallback {
         newStrategy.amount1 = _amount1;
         newStrategy.secondaryAmount0 = _secondaryAmount0;
         newStrategy.secondaryAmount1 = _secondaryAmount1;
-    }
-
-    /// @dev Change the fee setter's address
-    /// @param _feeSetter New feeSetter address
-    function changeFeeSetter(address _feeSetter) external {
-        require(msg.sender == _feeSetter);
-        feeSetter = _feeSetter;
-    }
-
-    /// @dev Change fee receiver
-    /// @param _feeTo New fee receiver
-    function changeFeeTo(address _feeTo) external {
-        require(msg.sender == feeSetter);
-        feeTo = _feeTo;
-    }
-
-    function blacklist(address _strategy) external {
-        require(msg.sender == feeSetter);
-        blacklisted[_strategy] = true;
     }
 }
