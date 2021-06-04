@@ -184,13 +184,14 @@ contract UniswapPoolActions is
     // swaps with exact input single functionality
     function swap(
         address _pool,
+        address _strategy,
         bool _zeroToOne,
         int256 _amount,
         uint160 _allowedSlippage
     ) internal returns (uint256 amountOut) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
 
         // TODO: Support partial slippage
         uint160 sqrtPriceLimitX96 =
@@ -204,7 +205,24 @@ contract UniswapPoolActions is
             _amount,
             sqrtPriceLimitX96
         );
+
+        (uint160 newSqrtRatioX96, , , , , , ) = pool.slot0();
+
+        console.log("newSqrtRatioX96", sqrtRatioX96);
+
+        uint160 difference =
+            sqrtRatioX96 < newSqrtRatioX96
+                ? sqrtRatioX96 / newSqrtRatioX96
+                : newSqrtRatioX96 / sqrtRatioX96;
+
+        if (strategy.allowedPriceSlippage() > 0) {
+            // check price P slippage
+            require(
+                uint256(difference) <= strategy.allowedPriceSlippage() / 1e6
+            );
+        }
     }
+
 
     // TODO: If on hold in add liquidity add to hold
     function swapExactInput(

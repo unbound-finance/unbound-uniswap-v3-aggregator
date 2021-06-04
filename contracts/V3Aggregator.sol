@@ -114,8 +114,8 @@ contract V3Aggregator is
 
         share = issueShare(
             _strategy,
-            _amount0,
-            _amount1,
+            amount0,
+            amount1,
             liquidityBefore,
             liquidityAfter,
             msg.sender
@@ -125,6 +125,10 @@ contract V3Aggregator is
             amount0 >= _amount0Min && amount1 >= _amount1Min,
             "Aggregator: Slippage"
         );
+
+        console.log("adding");
+        console.log("amountA", amount0);
+        console.log("amountB", amount1);
 
         increaseTotalAmounts(_strategy, amount0, amount1);
 
@@ -310,6 +314,10 @@ contract V3Aggregator is
         uint256 secondaryAmount0;
         uint256 secondaryAmount1;
 
+        console.log("redeploying amounts");
+        console.log(_amount0);
+        console.log(_amount1);
+
         if (strategy.swapAmount() > 0) {
             // don't let strategy owner swap more than they manage
             if (strategy.zeroToOne()) {
@@ -329,10 +337,13 @@ contract V3Aggregator is
             // swap tokens
             (amountOut) = swap(
                 address(pool),
+                _strategy,
                 strategy.zeroToOne(),
                 strategy.swapAmount(),
                 strategy.allowedSlippage()
             );
+
+            console.log("amount getting swapped", amountOut);
 
             // update mint liquidity variables according to swap amounts
             if (strategy.zeroToOne()) {
@@ -343,6 +354,10 @@ contract V3Aggregator is
                 amount1 = _amount1 - uint256(strategy.swapAmount());
             }
 
+            console.log("after swap");
+            console.log(amount0);
+            console.log(amount1);
+
             // the amount going in mint liquidity should be influenced by swap amount;
             (secondaryAmount0, secondaryAmount1) = mintLiquidity(
                 address(pool),
@@ -352,6 +367,10 @@ contract V3Aggregator is
                 amount1,
                 address(this)
             );
+
+            console.log("liquidity minted");
+            console.log("amount0", secondaryAmount0);
+            console.log("amount1", secondaryAmount1);
 
             // unused amounts
             amount0 = amount0 - secondaryAmount0;

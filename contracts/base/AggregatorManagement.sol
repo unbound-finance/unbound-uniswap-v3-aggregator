@@ -164,6 +164,7 @@ contract AggregatorManagement is AggregatorBase {
         // strategy owner fees
         if (strategy.fee() > 0) {
             uint256 managerShare = share.mul(strategy.fee()).div(1e6);
+            mintShare(_strategy, managerShare, strategy.feeTo());
             share = share.sub(managerShare);
         }
 

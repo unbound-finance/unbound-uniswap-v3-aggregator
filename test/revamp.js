@@ -226,8 +226,8 @@ describe("V3Aggregator", function () {
       poolBal1: poolBal1.toString(),
     });
 
-    const newTickLower = calculateTick(2700, 60);
-    const newTickUpper = calculateTick(3500, 60);
+    const newTickLower = calculateTick(2100, 60);
+    const newTickUpper = calculateTick(3200, 60);
 
     // launch new strategy
     const newStrategy = await TestStrategy.deploy(
@@ -243,33 +243,92 @@ describe("V3Aggregator", function () {
       .connect(userA)
       .addLiquidity(
         newStrategy.address,
-        "10000000000000000000",
+        "5000000000000000000",
         "60000000000000000000000",
         "0",
         "0"
       );
 
-    await v3Aggregator
-      .connect(userB)
-      .addLiquidity(
-        newStrategy.address,
-        "10000000000000000000",
-        "45000000000000000000000",
-        "0",
-        "0"
-      );
+    const newTick0 = calculateTick(2850, 60);
+    const newTick1 = calculateTick(4000, 60);
 
-    console.log("userC is interacting");
+    const unused = await v3Aggregator.unused(newStrategy.address);
 
-    await v3Aggregator
-      .connect(userC)
-      .addLiquidity(
-        newStrategy.address,
-        "10000000000000000000",
-        "30000000000000000000000",
-        "0",
-        "0"
-      );
+    //   // get swap amount using formula
+    const swapAmt = calculateSwapAmount(
+      newTick0,
+      newTick1,
+      "4230083192099712779",
+      "59999999999999999999996",
+      0,
+      0.3
+    );
+
+    console.log({ swapAmt });
+    await newStrategy.swapFunds(newTick0, newTick1, swapAmt, "10", true);
+
+    const zeroToOne = await newStrategy.zeroToOne();
+    const swapAmount = await newStrategy.swapAmount();
+    const allowedSlippage = await newStrategy.allowedSlippage();
+
+    console.log({
+      zeroToOne: zeroToOne.toString(),
+      swapAmount: swapAmount.toString(),
+      allowedSlippage: allowedSlippage.toString()
+    })
+
+    // await newStrategy.changeTicks(newTick0, newTick1, 0, 0, 0);
+    await v3Aggregator.rebalance(newStrategy.address);
+
+    const balanceOfAggregatorAfterInToken0 = await token0.balanceOf(
+      v3Aggregator.address
+    );
+    const balanceOfAggregatorAfterInToken1 = await token1.balanceOf(
+      v3Aggregator.address
+    );
+
+
+
+
+    console.log({
+      balanceOfAggregatorAfterInToken0:
+        balanceOfAggregatorAfterInToken0.toString(),
+      balanceOfAggregatorAfterInToken1:
+        balanceOfAggregatorAfterInToken1.toString(),
+      unusedAmount0: unused.amount0.toString(),
+      unusedAmount1: unused.amount1.toString(),
+    });
+
+    // const swapAmt = calculateSwapAmount(
+    //   newTickLower,
+    //   newTickUpper,
+    //   "9999999999999999999",
+    //   "13249651415825697010944",
+    //   0,
+    //   0.3
+    // );
+
+    // await v3Aggregator
+    //   .connect(userB)
+    //   .addLiquidity(
+    //     newStrategy.address,
+    //     "10000000000000000000",
+    //     "45000000000000000000000",
+    //     "0",
+    //     "0"
+    //   );
+
+    // // console.log("userC is interacting");
+
+    // await v3Aggregator
+    //   .connect(userC)
+    //   .addLiquidity(
+    //     newStrategy.address,
+    //     "20000000000000000000",
+    //     "30000000000000000000000",
+    //     "0",
+    //     "0"
+    //   );
 
     const strategyData = await v3Aggregator.strategies(newStrategy.address);
 
@@ -280,38 +339,47 @@ describe("V3Aggregator", function () {
     const poolBalAfter0 = await token0.balanceOf(pool.address);
     const poolBalAfter1 = await token1.balanceOf(pool.address);
 
-    const sharesOfUserA = await v3Aggregator.shares(newStrategy.address, userA.address)
-    const sharesOfUserB = await v3Aggregator.shares(newStrategy.address, userB.address)
-    const sharesOfUserC = await v3Aggregator.shares(newStrategy.address, userC.address)
-    const totalLiquidityOfStrategy = await v3Aggregator.strategies(newStrategy.address)
+    const sharesOfUserA = await v3Aggregator.shares(
+      newStrategy.address,
+      userA.address
+    );
+    const sharesOfUserB = await v3Aggregator.shares(
+      newStrategy.address,
+      userB.address
+    );
+    const sharesOfUserC = await v3Aggregator.shares(
+      newStrategy.address,
+      userC.address
+    );
+    const totalLiquidityOfStrategy = await v3Aggregator.strategies(
+      newStrategy.address
+    );
 
     console.log({
       initialTickUpper: newTickLower,
       initialTickLower: newTickLower,
       totalLiquidityOfStrategy: {
         amount0: totalLiquidityOfStrategy.amount0.toString(),
-        amount1: totalLiquidityOfStrategy.amount1.toString()
+        amount1: totalLiquidityOfStrategy.amount1.toString(),
       },
       sharesOfUserA: sharesOfUserA.toString(),
       sharesOfUserB: sharesOfUserB.toString(),
-      sharesOfUserC: sharesOfUserC.toString()
-    })
+      sharesOfUserC: sharesOfUserC.toString(),
+    });
 
     // await v3Aggregator.connect(userC).removeLiquidity(
     //   newStrategy.address,
     //   "60000000000000000000000",
     //   0,
     //   0
-    // ) 
+    // )
 
-
-    const balanceOfAggregatorAfterInToken0 = await token0.balanceOf(
-      v3Aggregator.address
-    );
-    const balanceOfAggregatorAfterInToken1 = await token0.balanceOf(
-      v3Aggregator.address
-    );
-
+    // const balanceOfAggregatorAfterInToken0 = await token0.balanceOf(
+    //   v3Aggregator.address
+    // );
+    // const balanceOfAggregatorAfterInToken1 = await token0.balanceOf(
+    //   v3Aggregator.address
+    // );
 
     // const getAmountsForLiquidity = await v3Aggregator.getAmountsForLiquidity(
     //   pool.address,
@@ -320,7 +388,6 @@ describe("V3Aggregator", function () {
     //   "32208242666285621817165"
     // );
 
-    
     console.log({
       newTickLower,
       newTickUpper,
@@ -331,25 +398,24 @@ describe("V3Aggregator", function () {
       poolBalAfter1: poolBalAfter1.toString(),
     });
 
-
     const newStrategyData = await v3Aggregator.strategies(newStrategy.address);
 
     console.log({
       newStrategyData,
     });
 
-    await newStrategy.changeTicks(tickLower, tickUpper, 0, 0, 0);
+    // await newStrategy.changeTicks(tickLower, tickUpper, 0, 0, 0);
 
-    await v3Aggregator.rebalance(newStrategy.address);
+    // await v3Aggregator.rebalance(newStrategy.address);
 
-    console.log({
-      poolBalAfter0: poolBalAfter0.toString(),
-      poolBalAfter1: poolBalAfter1.toString(),
-      balanceOfAggregatorAfterInToken0:
-        balanceOfAggregatorAfterInToken0.toString(),
-      balanceOfAggregatorAfterInToken1:
-        balanceOfAggregatorAfterInToken1.toString(),
-    });
+    // console.log({
+    //   poolBalAfter0: poolBalAfter0.toString(),
+    //   poolBalAfter1: poolBalAfter1.toString(),
+    //   balanceOfAggregatorAfterInToken0:
+    //     balanceOfAggregatorAfterInToken0.toString(),
+    //   balanceOfAggregatorAfterInToken1:
+    //     balanceOfAggregatorAfterInToken1.toString(),
+    // });
   });
 });
 
@@ -803,7 +869,7 @@ describe("V3Aggregator", function () {
 // it("Should remove liquidity when the liquidity is in limit order", async function () {});
 
 function calculateSwapAmount(_tickLower, _tickUpper, _amount0, _amount1, _fee) {
-  const currentPrice = 2985.292471924411;
+  const currentPrice = 3002;
   const range0 = 1.0001 ** _tickLower;
   const range1 = 1.0001 ** _tickUpper;
   const fee = 0.0003;

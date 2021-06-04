@@ -12,6 +12,8 @@ contract TestStrategy {
     int24 public secondaryTickLower;
     int24 public secondaryTickUpper;
 
+    uint256 public allowedPriceSlippage;
+
     address public pool;
     uint256 public fee;
 
@@ -66,6 +68,7 @@ contract TestStrategy {
         swapAmount = _swapAmount;
         allowedSlippage = _allowedSlippage;
         zeroToOne = _zeroToOne;
+        allowedPriceSlippage = 0;
     }
 
     function holdFunds() public {
