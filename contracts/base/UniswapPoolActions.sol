@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.6;
 pragma abicoder v2;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
@@ -195,8 +195,8 @@ contract UniswapPoolActions is
         // TODO: Support partial slippage
         uint160 sqrtPriceLimitX96 =
             _zeroToOne
-                ? sqrtRatioX96 - (sqrtRatioX96 * _allowedSlippage) / 100
-                : sqrtRatioX96 + (sqrtRatioX96 * _allowedSlippage) / 100;
+                ? sqrtRatioX96 - (sqrtRatioX96 * _allowedSlippage) / 10000
+                : sqrtRatioX96 + (sqrtRatioX96 * _allowedSlippage) / 10000;
 
         (amountOut) = swapExactInput(
             _pool,

@@ -1,10 +1,12 @@
-pragma solidity ^0.7.6;
+//SPDX-License-Identifier: Unlicense
+pragma solidity >=0.7.6;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
+
 
 library LiquidityHelper {
     /// @notice Calculates the liquidity amount using current ranges

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.6;
 
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -16,6 +16,7 @@ contract TestStrategy {
     uint256 public fee;
 
     uint256 public swapAmount;
+    // 1000000 is 100% slippage 
     uint160 public allowedSlippage;
     bool public zeroToOne;
 

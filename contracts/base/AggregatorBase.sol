@@ -1,4 +1,5 @@
-pragma solidity ^0.7.6;
+//SPDX-License-Identifier: Unlicense
+pragma solidity >=0.7.6;
 
 // TODO: Add events on each interaction
 
@@ -21,22 +22,35 @@ contract AggregatorBase {
         _;
     }
 
-    /// @dev Change the fee setter's address
-    /// @param _governance New governance address
+    /**
+     * @dev Change the fee setter's address
+     * @param _governance New governance address
+     */
     function changeGovernance(address _governance) external onlyGovernance {
         governance = _governance;
     }
 
+    /**
+     * @notice Change protocol's fee
+     * @dev 1e8 is 100%
+     * @param _newFee New governance address
+     */
     function changeFee(uint256 _newFee) external onlyGovernance {
         PROTOCOL_FEE = _newFee;
     }
 
-    /// @dev Change fee receiver
-    /// @param _feeTo New fee receiver
+    /**
+    * @dev Change fee receiver
+    * @param _feeTo New fee receiver
+    */
     function changeFeeTo(address _feeTo) external onlyGovernance {
         feeTo = _feeTo;
     }
 
+    /**
+    * @dev Blacklists the strategy
+    * @param _strategy Address of the strategy
+    */
     function blacklist(address _strategy) external onlyGovernance {
         blacklisted[_strategy] = true;
     }

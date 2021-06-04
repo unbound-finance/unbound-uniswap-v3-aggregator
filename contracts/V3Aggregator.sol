@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.6;
+
 pragma abicoder v2;
 
 // import base contracts
@@ -19,12 +20,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/SafeCast.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-
 import "hardhat/console.sol";
 
 // TODO: Add Reentrancy guard
 // TODO: Add Pausable functionality
-// TODO: Implement fees for strategy owner
 
 contract V3Aggregator is
     AggregatorBase,
@@ -60,12 +59,14 @@ contract V3Aggregator is
         feeTo = address(0);
     }
 
-    /// @notice Add liquidity to specific strategy
-    /// @param _strategy Address of the strategy
-    /// @param _amount0 Desired token0 amount
-    /// @param _amount1 Desired token1 amount
-    /// @param _amount0Min Minimum amoount for to be added for token0
-    /// @param _amount1Min Minimum amoount for to be added for token1
+    /**
+     * @notice Add liquidity to specific strategy
+     * @param _strategy Address of the strategy
+     * @param _amount0 Desired token0 amount
+     * @param _amount1 Desired token1 amount
+     * @param _amount0Min Minimum amoount for to be added for token0
+     * @param _amount1Min Minimum amoount for to be added for token1
+     */
     function addLiquidity(
         address _strategy,
         uint256 _amount0,
@@ -93,15 +94,6 @@ contract V3Aggregator is
                 strategy.secondaryTickUpper()
             );
 
-        uint128 liquidity =
-            LiquidityHelper.getLiquidityForAmounts(
-                address(pool),
-                strategy.tickLower(),
-                strategy.tickUpper(),
-                _amount0,
-                _amount1
-            );
-
         (amount0, amount1) = mintLiquidity(
             address(pool),
             strategy.tickLower(),
@@ -120,26 +112,32 @@ contract V3Aggregator is
                 strategy.secondaryTickUpper()
             );
 
-        share = issueShare(_strategy, liquidityAfter, liquidity, msg.sender);
+        share = issueShare(
+            _strategy,
+            _amount0,
+            _amount1,
+            liquidityBefore,
+            liquidityAfter,
+            msg.sender
+        );
         // price slippage check
         require(
             amount0 >= _amount0Min && amount1 >= _amount1Min,
             "Aggregator: Slippage"
         );
 
+        increaseTotalAmounts(_strategy, amount0, amount1);
+
         emit AddLiquidity(_strategy, amount0, amount1);
-
-        amount0 = amount0 + oldStrategy.amount0;
-        amount1 = amount1 + oldStrategy.amount1;
-
-        updateStrategy(_strategy, amount0, amount1, 0, 0);
     }
 
-    /// @notice Removes liquidity from the pool
-    /// @param _strategy Address of the strategy
-    /// @param _shares Share user wants to burn
-    /// @param _amount0Min Minimum amount0 user should receive
-    /// @param _amount1Min Minimum amount1 user should receive
+    /**
+     * @notice Removes liquidity from the pool
+     * @param _strategy Address of the strategy
+     * @param _shares Share user wants to burn
+     * @param _amount0Min Minimum amount0 user should receive
+     * @param _amount1Min Minimum amount1 user should receive
+     */
     function removeLiquidity(
         address _strategy,
         uint256 _shares,
@@ -149,6 +147,11 @@ contract V3Aggregator is
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         require(shares[_strategy][msg.sender] >= _shares, "insuffcient shares");
+        Strategy storage oldStrategy = strategies[_strategy];
+
+        // 1. Give from range order
+        // 2. Give from limit order
+        // 3. Give from unused amounts
 
         // ccalculate current
         uint128 currentLiquidity =
@@ -160,7 +163,7 @@ contract V3Aggregator is
                 strategy.secondaryTickUpper()
             );
 
-        // calculate current liquidity
+        // calculate amount of liquidity to be burned based on shares
         uint128 liquidity =
             _shares
                 .mul(currentLiquidity)
@@ -189,6 +192,12 @@ contract V3Aggregator is
             amount1 = amount1.mul(_shares).div(totalShares[_strategy]);
         }
 
+        decreaseUnusedAmounts(_strategy, amount0, amount1);
+
+        // TODO: Update unused variables and secondary amount variables
+        // decrease strategy amounts
+        decreaseTotalAmounts(_strategy, amount0, amount1);
+
         // add collected values from the pool to unused values
         amount0 = amount0.add(collect0);
         amount1 = amount1.add(collect1);
@@ -210,13 +219,17 @@ contract V3Aggregator is
             IERC20(pool.token1()).transfer(msg.sender, amount1);
         }
 
+        console.log("removing");
+        console.log(amount0);
+        console.log(amount1);
+
         emit RemoveLiquidity(_strategy, amount0, amount1);
     }
 
-    /// @notice Rebalances the pool to new ranges
-    /// @param _strategy Address of the strategy
-    // TODO: Put the remaining liquidity in limit order
-    // TODO: Add an option to remove and hold the liquidity
+    /**
+     * @notice Rebalances the pool to new ranges
+     * @param _strategy Address of the strategy
+     */
     function rebalance(address _strategy)
         external
         returns (uint256 amount0, uint256 amount1)
@@ -278,11 +291,12 @@ contract V3Aggregator is
         }
     }
 
-    // TODO: Add Swap functionality
-    /// @notice Redeploys the liquidity
-    /// @param _amount0 Amount of token0
-    /// @param _amount1 Amount of token1
-    /// @param _oldLiquidity Value of the liquidity previously added
+    /**
+     * @notice Redeploys the liquidity
+     * @param _amount0 Amount of token0
+     * @param _amount1 Amount of token1
+     * @param _oldLiquidity Value of the liquidity previously added
+     */
     function redeploy(
         address _strategy,
         uint256 _amount0,
@@ -417,5 +431,4 @@ contract V3Aggregator is
             strategy.tickUpper()
         );
     }
-
 }

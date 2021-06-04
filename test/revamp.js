@@ -243,7 +243,7 @@ describe("V3Aggregator", function () {
       .connect(userA)
       .addLiquidity(
         newStrategy.address,
-        "20000000000000000000",
+        "10000000000000000000",
         "60000000000000000000000",
         "0",
         "0"
@@ -253,11 +253,13 @@ describe("V3Aggregator", function () {
       .connect(userB)
       .addLiquidity(
         newStrategy.address,
-        "15000000000000000000",
+        "10000000000000000000",
         "45000000000000000000000",
         "0",
         "0"
       );
+
+    console.log("userC is interacting");
 
     await v3Aggregator
       .connect(userC)
@@ -278,10 +280,30 @@ describe("V3Aggregator", function () {
     const poolBalAfter0 = await token0.balanceOf(pool.address);
     const poolBalAfter1 = await token1.balanceOf(pool.address);
 
+    const sharesOfUserA = await v3Aggregator.shares(newStrategy.address, userA.address)
+    const sharesOfUserB = await v3Aggregator.shares(newStrategy.address, userB.address)
+    const sharesOfUserC = await v3Aggregator.shares(newStrategy.address, userC.address)
+    const totalLiquidityOfStrategy = await v3Aggregator.strategies(newStrategy.address)
+
     console.log({
-      poolBal0: poolBal0.toString(),
-      poolBal1: poolBal1.toString(),
-    });
+      initialTickUpper: newTickLower,
+      initialTickLower: newTickLower,
+      totalLiquidityOfStrategy: {
+        amount0: totalLiquidityOfStrategy.amount0.toString(),
+        amount1: totalLiquidityOfStrategy.amount1.toString()
+      },
+      sharesOfUserA: sharesOfUserA.toString(),
+      sharesOfUserB: sharesOfUserB.toString(),
+      sharesOfUserC: sharesOfUserC.toString()
+    })
+
+    // await v3Aggregator.connect(userC).removeLiquidity(
+    //   newStrategy.address,
+    //   "60000000000000000000000",
+    //   0,
+    //   0
+    // ) 
+
 
     const balanceOfAggregatorAfterInToken0 = await token0.balanceOf(
       v3Aggregator.address
@@ -289,6 +311,7 @@ describe("V3Aggregator", function () {
     const balanceOfAggregatorAfterInToken1 = await token0.balanceOf(
       v3Aggregator.address
     );
+
 
     // const getAmountsForLiquidity = await v3Aggregator.getAmountsForLiquidity(
     //   pool.address,
@@ -306,6 +329,13 @@ describe("V3Aggregator", function () {
       // getAmountsForLiquidity: getAmountsForLiquidity.toString(),
       poolBalAfter0: poolBalAfter0.toString(),
       poolBalAfter1: poolBalAfter1.toString(),
+    });
+
+
+    const newStrategyData = await v3Aggregator.strategies(newStrategy.address);
+
+    console.log({
+      newStrategyData,
     });
 
     await newStrategy.changeTicks(tickLower, tickUpper, 0, 0, 0);

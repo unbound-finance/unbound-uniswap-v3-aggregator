@@ -1,10 +1,14 @@
-pragma solidity ^0.7.6;
+//SPDX-License-Identifier: Unlicense
+pragma solidity >=0.7.6;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/math/Math.sol";
 
 import "./AggregatorBase.sol";
 
 import "../interfaces/IUnboundStrategy.sol";
+
+import "hardhat/console.sol";
 
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
@@ -132,23 +136,36 @@ contract AggregatorManagement is AggregatorBase {
     /**
      * @notice Updates the shares of the user
      * @param _strategy Address of the strategy
-     * @param _currentLiquidity The current liquidity of the pool
-     * @param _liquidity Liquidity derived from amounts given
+     * @param _amount0 Amount of token0
+     * @param _amount1 Amount of token1
+     * @param _liquidityBefore The liquidity before the user amounts are added
+     * @param _liquidityAfter Liquidity after user's liquidity is minted
      * @param _user address where shares should be issued
      */
     function issueShare(
         address _strategy,
-        uint160 _currentLiquidity,
-        uint160 _liquidity,
+        uint256 _amount0,
+        uint256 _amount1,
+        uint128 _liquidityBefore,
+        uint128 _liquidityAfter,
         address _user
     ) internal returns (uint256 share) {
-        // calculate shares
-        // TODO: Replace liquidity with liquidityBefore
-        share = uint256(_currentLiquidity)
-            .sub(_liquidity)
-            .mul(totalShares[_strategy])
-            .div(_liquidity)
-            .add(1000);
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+
+        if (totalShares[_strategy] == 0) {
+            share = Math.max(_amount0, _amount1);
+        } else {
+            share = uint256(_liquidityAfter)
+                .sub(uint256(_liquidityBefore))
+                .mul(totalShares[_strategy])
+                .div(uint256(_liquidityBefore));
+        }
+
+        // strategy owner fees
+        if (strategy.fee() > 0) {
+            uint256 managerShare = share.mul(strategy.fee()).div(1e6);
+            share = share.sub(managerShare);
+        }
 
         if (feeTo != address(0)) {
             // TODO: Consider strategy owner fees
@@ -170,8 +187,10 @@ contract AggregatorManagement is AggregatorBase {
      * @param _strategy Address of the strategy
      * @param _shares amount of shares user wants to burn
      */
-    function burnShare(address _strategy, uint256 _shares) internal {
-        // update shares
+    function burnShare(address _strategy, uint256 _shares)
+        internal
+        returns (uint256 amount0, uint256 amount1)
+    {
         shares[_strategy][msg.sender] = shares[_strategy][msg.sender].sub(
             uint256(_shares)
         );
@@ -206,5 +225,51 @@ contract AggregatorManagement is AggregatorBase {
         newStrategy.amount1 = _amount1;
         newStrategy.secondaryAmount0 = _secondaryAmount0;
         newStrategy.secondaryAmount1 = _secondaryAmount1;
+    }
+
+    /**
+     * @dev Increases total stored amounts for a specific strategy
+     * @param _strategy Address of the strategy
+     * @param _amount0 Amount of token0
+     * @param _amount1 Amount of token1
+     */
+    function increaseTotalAmounts(
+        address _strategy,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal {
+        Strategy storage strategy = strategies[_strategy];
+        uint256 amount0 = strategy.amount0.add(_amount0);
+        uint256 amount1 = strategy.amount1.add(_amount1);
+        updateStrategy(
+            _strategy,
+            amount0,
+            amount1,
+            strategy.secondaryAmount0,
+            strategy.secondaryAmount1
+        );
+    }
+
+    /**
+     * @dev Decreases total stored amounts for a specific strategy
+     * @param _strategy Address of the strategy
+     * @param _amount0 Amount of token0
+     * @param _amount1 Amount of token1
+     */
+    function decreaseTotalAmounts(
+        address _strategy,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal {
+        Strategy storage strategy = strategies[_strategy];
+        uint256 amount0 = strategy.amount0.sub(_amount0);
+        uint256 amount1 = strategy.amount1.sub(_amount1);
+        updateStrategy(
+            _strategy,
+            amount0,
+            amount1,
+            strategy.secondaryAmount0,
+            strategy.secondaryAmount1
+        );
     }
 }
