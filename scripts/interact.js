@@ -1,4 +1,4 @@
-const { BigNumber } = require("ethers");
+const { BigNumber, utils } = require("ethers");
 const { ethers } = require("hardhat");
 const bn = require("bignumber.js");
 const hre = require("hardhat");
@@ -16,7 +16,7 @@ async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
   const _strategy = "0x480800f922425688fA59b3e1918C988eB90F2137";
   const _aggregator = "0x99Ebb146235D14AD205D825ec550e91b283FEd0b";
-  const _pool = "0xC16c6765B6D118F4452D30670CF704c4C6255f02";
+  const _pool = "0xc2e9f25be6257c210d7adf0d4cd6e3e881ba25f8";
   const _token0 = "0xBf20a11bD3d13D643954a907d03512AC6E8893Ac";
   const _token1 = "0x760A5D9072FFf27F488a6785F23a6ad2abB3525a";
 
@@ -145,12 +145,19 @@ async function removeLiquidity(_strategy) {
     _strategy,
     "875000000000000000000",
     "0",
-    "0",
+    "0"
   );
   console.log(tx);
 }
 
-async function changeTicks() {}
+function getPositionKey(address, lowerTick, upperTick) {
+  return utils.keccak256(
+    utils.solidityPack(
+      ["address", "int24", "int24"],
+      [address, lowerTick, upperTick]
+    )
+  );
+}
 
 function encodePriceSqrt(reserve0, reserve1) {
   console.log("encoding");

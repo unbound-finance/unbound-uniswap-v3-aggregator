@@ -38,13 +38,15 @@ contract UniswapPoolActions is
         bool zeroToOne;
     }
 
-    /// @notice Mints liquidity from V3 Pool
-    /// @param _pool Address of the pool
-    /// @param _tickLower Lower tick
-    /// @param _tickUpper Upper tick
-    /// @param _amount0 Amount of token0
-    /// @param _amount1 Amount of token1
-    /// @param _payer Address which is adding the liquidity
+    /**
+     * @notice Mints liquidity from V3 Pool
+     * @param _pool Address of the pool
+     * @param _tickLower Lower tick
+     * @param _tickUpper Upper tick
+     * @param _amount0 Amount of token0
+     * @param _amount1 Amount of token1
+     * @param _payer Address which is adding the liquidity
+     */
     function mintLiquidity(
         address _pool,
         int24 _tickLower,
@@ -74,13 +76,15 @@ contract UniswapPoolActions is
         );
     }
 
-    /// @notice Burns liquidity in the given range
-    /// @param _pool Address of the pool
-    /// @param _strategy Address of the strategy
-    /// @param _tickLower Lower Tick
-    /// @param _tickUpper Upper Tick
-    /// @param _amount0 Amount 0 to burn
-    /// @param _amount1 Amount to burn
+    /**
+     * @notice Burns liquidity in the given range
+     * @param _pool Address of the pool
+     * @param _strategy Address of the strategy
+     * @param _tickLower Lower Tick
+     * @param _tickUpper Upper Tick
+     * @param _amount0 Amount 0 to burn
+     * @param _amount1 Amount to burn
+     */
     function burnLiquidity(
         address _pool,
         address _strategy,
@@ -115,13 +119,16 @@ contract UniswapPoolActions is
             (owed0, owed1) = pool.burn(_tickLower, _tickUpper, liquidity);
         }
 
+        (uint128 fee0, uint128 fee1) =
+            LiquidityHelper.getAccumulatedFees(_pool, _tickLower, _tickUpper);
+
         // collect fees
         (collect0, collect1) = pool.collect(
             address(this),
             _tickLower,
             _tickUpper,
-            type(uint128).max,
-            type(uint128).max
+            uint128(_amount0) + fee0,
+            uint128(_amount1) + fee1
         );
 
         emit FeesClaimed(
@@ -132,8 +139,10 @@ contract UniswapPoolActions is
         );
     }
 
-    /// @notice Burns all the liquidity and collects fees
-    /// @param _strategy Address of the strategy
+    /**
+     * @notice Burns all the liquidity and collects fees
+     * @param _strategy Address of the strategy
+     */
     function burnAllLiquidity(address _strategy)
         internal
         returns (
@@ -244,7 +253,9 @@ contract UniswapPoolActions is
         return uint256(-(_zeroToOne ? amount1 : amount0));
     }
 
-    /// @dev Callback for Uniswap V3 pool.
+    /**
+     * @dev Callback for Uniswap V3 pool.
+     */
     function uniswapV3SwapCallback(
         int256 amount0,
         int256 amount1,
@@ -275,7 +286,9 @@ contract UniswapPoolActions is
         }
     }
 
-    /// @dev Callback for Uniswap V3 pool.
+    /**
+     * @dev Callback for Uniswap V3 pool.
+     */
     function uniswapV3MintCallback(
         uint256 amount0,
         uint256 amount1,

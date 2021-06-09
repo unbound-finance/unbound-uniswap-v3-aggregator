@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 
-const { BigNumber } = require("ethers");
+const { BigNumber, utils } = require("ethers");
 const { ethers } = require("hardhat");
 const bn = require("bignumber.js");
 
@@ -248,24 +248,48 @@ describe("Base Functionality", function () {
 
     sharesOfUser = await aggregator.shares(newStrategy.address, userA.address);
 
+    const rebalanceLowerTick = calculateTick(2700, 60);
+    const rebalanceUpperTick = calculateTick(3200, 60);
 
-    const rebalanceLowerTick = calculateTick(2700, 60)
-    const rebalanceUpperTick = calculateTick(3200, 60)
+    await newStrategy.changeTicks(
+      rebalanceLowerTick,
+      rebalanceUpperTick,
+      0,
+      0,
+      0
+    );
 
-    await newStrategy.changeTicks(rebalanceLowerTick, rebalanceUpperTick, 0, 0, 0);
-    
-    const rebalanceLowerTick0 = calculateTick(2900, 60)
-    const rebalanceUpperTick1 = calculateTick(3100, 60)
-    await newStrategy.changeTicks(rebalanceLowerTick0, rebalanceUpperTick1, 0, 0, 0);
-
-
+    // const rebalanceLowerTick0 = calculateTick(2900, 60);
+    // const rebalanceUpperTick1 = calculateTick(3100, 60);
+    // await newStrategy.changeTicks(
+    //   rebalanceLowerTick0,
+    //   rebalanceUpperTick1,
+    //   0,
+    //   0,
+    //   0
+    // );
 
     const unused = await aggregator.unused(newStrategy.address);
-    const balanceOfAggregatorAfterInToken0 = await token0.balanceOf(aggregator.address);
-    const balanceOfAggregatorAfterInToken1 = await token1.balanceOf(aggregator.address);
+    const balanceOfAggregatorAfterInToken0 = await token0.balanceOf(
+      aggregator.address
+    );
+    const balanceOfAggregatorAfterInToken1 = await token1.balanceOf(
+      aggregator.address
+    );
+
+    const positionKey = getPositionKey(
+      aggregator.address,
+      rebalanceLowerTick,
+      rebalanceUpperTick
+    );
+
+    console.log({positionKey})
+
+    const position = await pool.positions(positionKey);
 
     // values after removing shares of the user for first time
     console.log({
+      position: position,
       "shares of user before second remove liquidity": sharesOfUser.toString(),
       unusedAmount0: unused.amount0.toString(),
       unusedAmount1: unused.amount1.toString(),
@@ -968,6 +992,15 @@ describe("Base Functionality", function () {
 // });
 
 // it("Should remove liquidity when the liquidity is in limit order", async function () {});
+
+function getPositionKey(address, lowerTick, upperTick) {
+  return utils.keccak256(
+    utils.solidityPack(
+      ["address", "int24", "int24"],
+      [address, lowerTick, upperTick]
+    )
+  );
+}
 
 function calculateSwapAmount(_tickLower, _tickUpper, _amount0, _amount1, _fee) {
   const currentPrice = 3006.003;
