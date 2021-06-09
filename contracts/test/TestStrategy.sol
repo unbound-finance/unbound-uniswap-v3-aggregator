@@ -6,6 +6,10 @@ import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+interface IAggregator {
+    function rebalance(address _strategy) external;
+}
+
 contract TestStrategy {
     int24 public tickLower;
     int24 public tickUpper;
@@ -24,19 +28,26 @@ contract TestStrategy {
 
     bool public hold;
 
+    address owner;
+    address aggregator;
+
     constructor(
         int24 _tickLower,
         int24 _tickUpper,
         int24 _secondaryTickLower,
         int24 _secondaryTickUpper,
         address _pool,
-        uint256 _fee
+        uint256 _fee,
+        address _owner,
+        address _aggregator
     ) {
         tickLower = _tickLower;
         tickUpper = _tickUpper;
         secondaryTickLower = _secondaryTickLower;
         secondaryTickUpper = _secondaryTickUpper;
         pool = _pool;
+        owner = _owner;
+        aggregator = _aggregator;
     }
 
     function changeTicks(
@@ -54,6 +65,7 @@ contract TestStrategy {
         if (swapAmount == 0) {
             swapAmount = 0;
         }
+        IAggregator(aggregator).rebalance(address(this));
     }
 
     function swapFunds(
@@ -69,6 +81,7 @@ contract TestStrategy {
         allowedSlippage = _allowedSlippage;
         zeroToOne = _zeroToOne;
         allowedPriceSlippage = 0;
+        IAggregator(aggregator).rebalance(address(this));
     }
 
     function holdFunds() public {
@@ -77,5 +90,10 @@ contract TestStrategy {
         secondaryTickLower = 0;
         secondaryTickUpper = 0;
         hold = true;
+        IAggregator(aggregator).rebalance(address(this));
+    }
+
+    function changeFee(uint256 _newFee) public {
+        fee = _newFee;
     }
 }

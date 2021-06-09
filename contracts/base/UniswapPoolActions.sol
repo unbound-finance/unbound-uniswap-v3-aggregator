@@ -208,8 +208,6 @@ contract UniswapPoolActions is
 
         (uint160 newSqrtRatioX96, , , , , , ) = pool.slot0();
 
-        console.log("newSqrtRatioX96", sqrtRatioX96);
-
         uint160 difference =
             sqrtRatioX96 < newSqrtRatioX96
                 ? sqrtRatioX96 / newSqrtRatioX96
@@ -222,7 +220,6 @@ contract UniswapPoolActions is
             );
         }
     }
-
 
     // TODO: If on hold in add liquidity add to hold
     function swapExactInput(

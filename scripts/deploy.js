@@ -1,4 +1,3 @@
-
 const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
 const bn = require("bignumber.js");
@@ -14,14 +13,17 @@ async function main() {
   const TestStrategy = await ethers.getContractFactory("TestStrategy");
   const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
 
-  const factory = await ethers.getContractAt("UniswapV3Factory", factoryAddress);
+  const factory = await ethers.getContractAt(
+    "UniswapV3Factory",
+    factoryAddress
+  );
 
-  console.log("⭐  Deployment Started")
+  console.log("⭐  Deployment Started");
 
   // deploy DAI
   const dai = await TestToken.deploy(
-    "uniDAI0",
-    "DAI0",
+    "uniDAI2",
+    "DAI2",
     18,
     "100000000000000000000000000000",
     owner
@@ -29,8 +31,8 @@ async function main() {
 
   // deploy ETH
   const eth = await TestToken.deploy(
-    "uniETH0",
-    "ETH0",
+    "uniETH2",
+    "ETH2",
     18,
     "100000000000000000000000000000",
     owner
@@ -44,50 +46,51 @@ async function main() {
 
   const pool = await ethers.getContractAt("UniswapV3Pool", poolAddress);
 
-  // add initial liquidity to start the pool
-  tickLower = calculateTick(3000, 60);
-  tickUpper = calculateTick(4000, 60);
-
-  console.log({
-    tickLower,
-    tickUpper
-  })
-
-  // deploy strategy contract
-  const strategy = await TestStrategy.deploy(
-    "2500",
-    "4500",
-    tickLower,
-    tickUpper,
-    pool.address,
-    dai.address,
-    "0"
-  );
-
   // set reserves at ETH price of 3500 DAI per ETh
   const initialEthReserve = "28571428571400000000";
   const initialDaiReserve = "100000000000000000000000";
 
-  // select the reserve amounts based on the tokens 
+  // select the reserve amounts based on the tokens
   let reserve0, reserve1;
   if (dai.address < eth.address) {
     reserve0 = initialDaiReserve;
     reserve1 = initialEthReserve;
-  }
-  else {
+
+    // add initial liquidity to start the pool
+    tickUpper = calculateTick(0.0003333333333333333, 60);
+    tickLower = calculateTick(0.00025, 60);
+  } else {
     reserve0 = initialEthReserve;
     reserve1 = initialDaiReserve;
+
+    // add initial liquidity to start the pool
+    tickLower = calculateTick(3000, 60);
+    tickUpper = calculateTick(4000, 60);
   }
 
-  console.log(reserve0, reserve1)
+  console.log(reserve0, reserve1);
 
   // initialize the pool
   const sqrtPriceX96 = encodePriceSqrt(reserve0, reserve1);
-  console.log({sqrtPriceX96})
+  console.log({ sqrtPriceX96 });
   await pool.initialize(sqrtPriceX96);
 
-  // deploy aggregator contract 
-  const v3Aggregator = await V3Aggregator.deploy();
+  const governance = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
+
+  // deploy aggregator contract
+  const v3Aggregator = await V3Aggregator.deploy(governance);
+
+  // deploy strategy contract
+  const strategy = await TestStrategy.deploy(
+    tickLower,
+    tickUpper,
+    0,
+    0,
+    pool.address,
+    "0",
+    owner,
+    v3Aggregator.address
+  );
 
   // console.log contract addresses
   console.log("🎉 Contracts Deployed");
@@ -101,7 +104,7 @@ async function main() {
 }
 
 function encodePriceSqrt(reserve0, reserve1) {
-  console.log("encoding")
+  console.log("encoding");
   return BigNumber.from(
     new bn(reserve1.toString())
       .div(reserve0.toString())
@@ -111,7 +114,6 @@ function encodePriceSqrt(reserve0, reserve1) {
       .toString()
   );
 }
-
 
 function calculateTick(price, tickSpacing) {
   const logTick = 46054 * Math.log10(Math.sqrt(price));

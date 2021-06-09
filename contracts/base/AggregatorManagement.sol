@@ -48,7 +48,7 @@ contract AggregatorManagement is AggregatorBase {
     mapping(address => mapping(address => uint256)) public shares;
 
     // mapping of strategies with their total share
-    mapping(address => uint256) totalShares;
+    mapping(address => uint256) public totalShares;
 
     // hold
     mapping(address => UnusedAmounts) public unused;
@@ -97,8 +97,12 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount1
     ) internal returns (uint256 amount0, uint256 amount1) {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
-        unusedAmounts.amount0 = unusedAmounts.amount0.add(_amount0);
-        unusedAmounts.amount1 = unusedAmounts.amount1.add(_amount1);
+        if (unusedAmounts.amount0 > 0) {
+            unusedAmounts.amount0 = unusedAmounts.amount0.sub(_amount0);
+        }
+        if (unusedAmounts.amount1 > 0) {
+            unusedAmounts.amount1 = unusedAmounts.amount1.sub(_amount1);
+        }
     }
 
     /**
@@ -169,9 +173,7 @@ contract AggregatorManagement is AggregatorBase {
         }
 
         if (feeTo != address(0)) {
-            // TODO: Consider strategy owner fees
             uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
-
             share = share.sub(fee);
             // issue fee
             mintShare(_strategy, fee, feeTo);
@@ -188,16 +190,15 @@ contract AggregatorManagement is AggregatorBase {
      * @param _strategy Address of the strategy
      * @param _shares amount of shares user wants to burn
      */
-    function burnShare(address _strategy, uint256 _shares)
-        internal
-        returns (uint256 amount0, uint256 amount1)
-    {
-        shares[_strategy][msg.sender] = shares[_strategy][msg.sender].sub(
-            uint256(_shares)
-        );
+    function burnShare(
+        address _strategy,
+        uint256 _shares,
+        address _user
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        shares[_strategy][_user] = shares[_strategy][_user].sub(_shares);
         // update total shares
         totalShares[_strategy] = totalShares[_strategy].sub(_shares);
-        emit BurnShare(_strategy, msg.sender, _shares);
+        emit BurnShare(_strategy, _user, _shares);
     }
 
     /**
@@ -271,6 +272,30 @@ contract AggregatorManagement is AggregatorBase {
             amount1,
             strategy.secondaryAmount0,
             strategy.secondaryAmount1
+        );
+    }
+
+    function decreaseAmounts(
+        address _strategy,
+        uint256 _primaryAmount0,
+        uint256 _primaryAmount1,
+        uint256 _secondaryAmount0,
+        uint256 _secondaryAmount1
+    ) internal {
+        Strategy storage strategy = strategies[_strategy];
+
+        uint256 amount0 = strategy.amount0.sub(_primaryAmount0);
+        uint256 amount1 = strategy.amount1.sub(_primaryAmount1);
+        uint256 secondaryAmount0 =
+            strategy.secondaryAmount0.sub(_secondaryAmount0);
+        uint256 secondaryAmount1 =
+            strategy.secondaryAmount1.sub(_secondaryAmount1);
+        updateStrategy(
+            _strategy,
+            amount0,
+            amount1,
+            secondaryAmount0,
+            secondaryAmount1
         );
     }
 }
