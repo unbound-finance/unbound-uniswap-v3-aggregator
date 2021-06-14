@@ -1,7 +1,18 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity >=0.7.6;
+pragma abicoder v2;
 
 interface IUnboundStrategy {
+    struct Tick {
+        uint256 amount0;
+        uint256 amount1;
+        int24 tickUpper;
+        int24 tickLower;
+    }
+
+    // get ticks
+    function ticks() external view returns (Tick[] memory);
+
     // address of the pool
     function pool() external view returns (address);
 
@@ -30,15 +41,15 @@ interface IUnboundStrategy {
 
     // lower tick for limit order
     function secondaryTickLower() external view returns (int24);
-    
+
     // 1e8 means 100%
     // strategy fee the owner wants to charge
     function fee() external view returns (uint256);
 
     // address where the strategy owner's fees should be sent
-    function feeTo() external view returns(address);
+    function feeTo() external view returns (address);
 
     // slippage 1e6 means 100%
     // allowed price slippage on the value of root p
-    function allowedPriceSlippage() external view returns(uint256);
+    function allowedPriceSlippage() external view returns (uint256);
 }

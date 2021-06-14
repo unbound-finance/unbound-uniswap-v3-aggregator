@@ -2,6 +2,8 @@
 pragma solidity >=0.7.6;
 pragma abicoder v2;
 
+import "@openzeppelin/contracts/math/SafeMath.sol";
+
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
@@ -21,6 +23,8 @@ contract UniswapPoolActions is
     IUniswapV3MintCallback,
     IUniswapV3SwapCallback
 {
+    using SafeMath for uint256;
+
     event FeesClaimed(
         address indexed pool,
         address indexed strategy,
@@ -155,39 +159,23 @@ contract UniswapPoolActions is
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage oldStrategy = strategies[_strategy];
 
-        // Burn liquidity for range order
-        (uint256 rangeAmount0, uint256 rangeAmount1, uint128 rangeLiquidity) =
-            burnLiquidity(
-                address(pool),
-                address(strategy),
-                oldStrategy.tickLower,
-                oldStrategy.tickUpper,
-                oldStrategy.amount0,
-                oldStrategy.amount1
-            );
+        for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
+            IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
+            // Burn liquidity for range order
+            (uint256 amount0, uint256 amount1, uint128 liquidity) =
+                burnLiquidity(
+                    address(pool),
+                    address(strategy),
+                    tick.tickLower,
+                    tick.tickUpper,
+                    tick.amount0,
+                    tick.amount1
+                );
 
-        uint256 limitAmount0;
-        uint256 limitAmount1;
-        uint128 limitLiquidity;
-
-        // Burn liquidity for limit order
-        if (
-            oldStrategy.secondaryTickLower != 0 &&
-            oldStrategy.secondaryTickUpper != 0
-        ) {
-            (limitAmount0, limitAmount1, limitLiquidity) = burnLiquidity(
-                address(pool),
-                address(strategy),
-                oldStrategy.secondaryTickLower,
-                oldStrategy.secondaryTickUpper,
-                oldStrategy.secondaryAmount0,
-                oldStrategy.secondaryAmount1
-            );
+            amount0 = amount0.add(amount0);
+            amount1 = amount0.add(amount1);
+            liquidity += liquidity;
         }
-
-        liquidity = rangeLiquidity + limitLiquidity;
-        amount0 = rangeAmount0 + limitAmount0;
-        amount1 = rangeAmount1 + limitAmount1;
     }
 
     // swaps with exact input single functionality
@@ -262,10 +250,6 @@ contract UniswapPoolActions is
         bytes calldata data
     ) external override {
         SwapCallbackData memory decoded = abi.decode(data, (SwapCallbackData));
-
-        uint256 amt0 = uint256(amount0);
-        uint256 amt1 = uint256(-amount1);
-
         // check if the callback is received from Uniswap V3 Pool
         require(msg.sender == address(decoded.pool));
 

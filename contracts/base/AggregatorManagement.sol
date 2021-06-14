@@ -13,7 +13,7 @@ import "hardhat/console.sol";
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
-    struct Range {
+    struct Tick {
         uint256 amount0;
         uint256 amount1;
         int24 tickUpper;
@@ -21,16 +21,15 @@ contract AggregatorManagement is AggregatorBase {
     }
 
     struct Strategy {
-        uint256 amount0; // used amount0
-        uint256 amount1; // used amount1
-        uint256 secondaryAmount0;
-        uint256 secondaryAmount1;
-        int24 tickLower;
-        int24 tickUpper;
-        int24 secondaryTickLower;
-        int24 secondaryTickUpper;
-        Range[] ranges;
-        bool swap;
+        // uint256 amount0; // used amount0
+        // uint256 amount1; // used amount1
+        // uint256 secondaryAmount0;
+        // uint256 secondaryAmount1;
+        // int24 tickLower;
+        // int24 tickUpper;
+        // int24 secondaryTickLower;
+        // int24 secondaryTickUpper;
+        IUnboundStrategy.Tick[] ticks;
         bool hold;
     }
 
@@ -71,7 +70,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _amount0,
         uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
         unusedAmounts.amount0 = unusedAmounts.amount0.add(_amount0);
         unusedAmounts.amount1 = unusedAmounts.amount1.add(_amount1);
@@ -87,7 +86,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _amount0,
         uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
         unusedAmounts.amount0 = _amount0;
         unusedAmounts.amount1 = _amount1;
@@ -103,7 +102,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _amount0,
         uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
         if (unusedAmounts.amount0 > 0) {
             unusedAmounts.amount0 = unusedAmounts.amount0.sub(_amount0);
@@ -212,98 +211,119 @@ contract AggregatorManagement is AggregatorBase {
     /**
      * @dev Updates strategy data for future use
      * @param _strategy Address of the strategy
-     * @param _amount0 Amount of token0
-     * @param _amount1 Amount of token1
-     * @param _secondaryAmount0 Amount0 placed in the limit order
-     * @param _secondaryAmount1 Amount1 placed in the limit order
+     * @param _ticks Array of the new ticks
      */
     function updateStrategy(
         address _strategy,
-        uint256 _amount0,
-        uint256 _amount1,
-        uint256 _secondaryAmount0,
-        uint256 _secondaryAmount1
+        IUnboundStrategy.Tick[] memory _ticks
     ) internal {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         Strategy storage newStrategy = strategies[_strategy];
-        newStrategy.tickLower = strategy.tickLower();
-        newStrategy.tickUpper = strategy.tickUpper();
-        newStrategy.secondaryTickLower = strategy.secondaryTickLower();
-        newStrategy.secondaryTickUpper = strategy.secondaryTickUpper();
         newStrategy.hold = strategy.hold();
-        newStrategy.amount0 = _amount0;
-        newStrategy.amount1 = _amount1;
-        newStrategy.secondaryAmount0 = _secondaryAmount0;
-        newStrategy.secondaryAmount1 = _secondaryAmount1;
+        // update the ticks
+        updateTicks(false, _strategy, 0, 0, 0, _ticks);
     }
 
-    /**
-     * @dev Increases total stored amounts for a specific strategy
-     * @param _strategy Address of the strategy
-     * @param _amount0 Amount of token0
-     * @param _amount1 Amount of token1
-     */
-    function increaseTotalAmounts(
+    function updateUsedAmounts(
         address _strategy,
+        IUnboundStrategy.Tick[] memory _ticks,
+        uint256 _tickId,
         uint256 _amount0,
         uint256 _amount1
     ) internal {
         Strategy storage strategy = strategies[_strategy];
-        uint256 amount0 = strategy.amount0.add(_amount0);
-        uint256 amount1 = strategy.amount1.add(_amount1);
-        updateStrategy(
-            _strategy,
-            amount0,
-            amount1,
-            strategy.secondaryAmount0,
-            strategy.secondaryAmount1
-        );
+
+        // store old amounts in memory to use later
+        IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
+
+        // update ticks
+        updateTicks(true, _strategy, _tickId, _amount0, _amount1, _ticks);
     }
 
     /**
-     * @dev Decreases total stored amounts for a specific strategy
-     * @param _strategy Address of the strategy
-     * @param _amount0 Amount of token0
-     * @param _amount1 Amount of token1
+     * @dev Increase amounts in the current ticks
+     * @param _ticks The array of ticks
+     * @param _amount0 Amount of token0 to be increased
+     * @param _amount1 Amount of token1 to be increased
      */
-    function decreaseTotalAmounts(
+    function increaseUsedAmounts(
         address _strategy,
+        IUnboundStrategy.Tick[] memory _ticks,
+        uint256 _tickId,
         uint256 _amount0,
         uint256 _amount1
     ) internal {
         Strategy storage strategy = strategies[_strategy];
-        uint256 amount0 = strategy.amount0.sub(_amount0);
-        uint256 amount1 = strategy.amount1.sub(_amount1);
-        updateStrategy(
+
+        // store old amounts in memory to use later
+        IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
+
+        // update ticks
+        updateTicks(
+            true,
             _strategy,
-            amount0,
-            amount1,
-            strategy.secondaryAmount0,
-            strategy.secondaryAmount1
+            _tickId,
+            tick.amount0.add(_amount0),
+            tick.amount1.add(_amount1),
+            _ticks
         );
     }
 
-    function decreaseAmounts(
+    function updateTicks(
+        bool specificUpdate,
         address _strategy,
-        uint256 _primaryAmount0,
-        uint256 _primaryAmount1,
-        uint256 _secondaryAmount0,
-        uint256 _secondaryAmount1
+        uint256 _tickId,
+        uint256 _amount0,
+        uint256 _amount1,
+        IUnboundStrategy.Tick[] memory _ticks
+    ) internal {
+        Strategy storage strategy = strategies[_strategy];
+        delete strategy.ticks;
+        for (uint256 i = 0; i < _ticks.length; i++) {
+            IUnboundStrategy.Tick memory tick = strategy.ticks[i];
+            IUnboundStrategy.Tick memory newTick;
+            newTick.tickLower = tick.tickLower;
+            newTick.tickUpper = tick.tickUpper;
+            // if the provided tick id matches with index
+            // update the amounts directly else continue with old amounts
+            if (i == _tickId && specificUpdate) {
+                newTick.amount0 = _amount0;
+                newTick.amount1 = _amount1;
+            } else {
+                newTick.amount0 = tick.amount0;
+                newTick.amount1 = tick.amount1;
+            }
+
+            strategy.ticks.push(newTick);
+        }
+    }
+
+    /**
+     * @dev Decrease amounts in the current ticks
+     * @param _ticks The array of ticks
+     * @param _amount0 Amount of token0 to be increased
+     * @param _amount1 Amount of token1 to be increased
+     */
+    function decreaseUsedAmounts(
+        address _strategy,
+        IUnboundStrategy.Tick[] memory _ticks,
+        uint256 _tickId,
+        uint256 _amount0,
+        uint256 _amount1
     ) internal {
         Strategy storage strategy = strategies[_strategy];
 
-        uint256 amount0 = strategy.amount0.sub(_primaryAmount0);
-        uint256 amount1 = strategy.amount1.sub(_primaryAmount1);
-        uint256 secondaryAmount0 =
-            strategy.secondaryAmount0.sub(_secondaryAmount0);
-        uint256 secondaryAmount1 =
-            strategy.secondaryAmount1.sub(_secondaryAmount1);
-        updateStrategy(
+        // store old amounts in memory to use later
+        IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
+
+        // update ticks
+        updateTicks(
+            true,
             _strategy,
-            amount0,
-            amount1,
-            secondaryAmount0,
-            secondaryAmount1
+            _tickId,
+            tick.amount0.sub(_amount0),
+            tick.amount1.sub(_amount1),
+            _ticks
         );
     }
 }

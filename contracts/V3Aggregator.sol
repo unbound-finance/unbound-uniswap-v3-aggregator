@@ -10,6 +10,7 @@ import "./base/UniswapPoolActions.sol";
 
 // import Unbound interfaces
 import "./interfaces/IUnboundStrategy.sol";
+import "./Strategy.sol";
 
 // import libraries
 import "./libraries/LiquidityHelper.sol";
@@ -81,23 +82,22 @@ contract V3Aggregator is
             uint256 amount1
         )
     {
+        // TODO: If liquidity is on hold don't pass, keep it in unused
+
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage oldStrategy = strategies[_strategy];
 
-        uint128 liquidityBefore =
-            LiquidityHelper.getCurrentLiquidity(
-                address(pool),
-                strategy.tickLower(),
-                strategy.tickUpper(),
-                strategy.secondaryTickLower(),
-                strategy.secondaryTickUpper()
-            );
+        IUnboundStrategy.Tick[] memory ticks = strategy.ticks();
 
+        uint128 liquidityBefore =
+            LiquidityHelper.getCurrentLiquidity(address(pool), ticks);
+
+        // index 0 will always be an primary tick
         (amount0, amount1) = mintLiquidity(
             address(pool),
-            strategy.tickLower(),
-            strategy.tickUpper(),
+            ticks[0].tickLower,
+            ticks[0].tickUpper,
             _amount0,
             _amount1,
             msg.sender
@@ -106,10 +106,7 @@ contract V3Aggregator is
         uint128 liquidityAfter =
             LiquidityHelper.getCurrentLiquidity(
                 address(pool),
-                strategy.tickLower(),
-                strategy.tickUpper(),
-                strategy.secondaryTickLower(),
-                strategy.secondaryTickUpper()
+                strategy.ticks()
             );
 
         share = issueShare(
@@ -126,7 +123,7 @@ contract V3Aggregator is
             "Aggregator: Slippage"
         );
 
-        increaseTotalAmounts(_strategy, amount0, amount1);
+        increaseUsedAmounts(_strategy, ticks, 0, amount0, amount1);
 
         emit AddLiquidity(_strategy, amount0, amount1);
     }
@@ -152,54 +149,37 @@ contract V3Aggregator is
         );
         Strategy storage oldStrategy = strategies[_strategy];
 
-        uint256 secondaryAmount0;
-        uint256 secondaryAmount1;
+        for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
+            IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
 
-        uint256 unusedAmount0;
-        uint256 unusedAmount1;
+            amount0 = tick.amount0.mul(_shares).div(totalShares[_strategy]);
+            amount1 = tick.amount1.mul(_shares).div(totalShares[_strategy]);
 
-        // calculate amount0 and amount1 for primary ranges
-        amount0 = oldStrategy.amount0.mul(_shares).div(totalShares[_strategy]);
-        amount1 = oldStrategy.amount1.mul(_shares).div(totalShares[_strategy]);
-
-        // burn from range order
-        (amount0, amount1, ) = burnLiquidity(
-            address(pool),
-            _strategy,
-            strategy.tickLower(),
-            strategy.tickUpper(),
-            amount0,
-            amount1
-        );
-
-        if (
-            oldStrategy.secondaryAmount0 > 0 || oldStrategy.secondaryAmount1 > 0
-        ) {
-            // calculate amount0 and amount1 for secondary ranges
-            secondaryAmount0 = oldStrategy.secondaryAmount0.mul(_shares).div(
-                totalShares[_strategy]
-            );
-            secondaryAmount1 = oldStrategy.secondaryAmount1.mul(_shares).div(
-                totalShares[_strategy]
-            );
-            // burn from limit order
-            (secondaryAmount0, secondaryAmount1, ) = burnLiquidity(
+            (amount0, amount1, ) = burnLiquidity(
                 address(pool),
                 _strategy,
-                strategy.secondaryTickLower(),
-                strategy.secondaryTickUpper(),
-                secondaryAmount0,
-                secondaryAmount1
+                tick.tickLower,
+                tick.tickUpper,
+                amount0,
+                amount1
+            );
+
+            // store amounts in outside for loop
+            amount0 = amount0.add(amount0);
+            amount1 = amount1.add(amount1);
+
+            // decrease used amounts for each tick
+            decreaseUsedAmounts(
+                _strategy,
+                oldStrategy.ticks,
+                i,
+                amount0,
+                amount1
             );
         }
 
-        decreaseAmounts(
-            _strategy,
-            amount0,
-            amount1,
-            secondaryAmount0,
-            secondaryAmount1
-        );
+        uint256 unusedAmount0;
+        uint256 unusedAmount1;
 
         // get unused amounts of the strategy
         (unusedAmount0, unusedAmount1) = getUnusedAmounts(_strategy);
@@ -218,8 +198,8 @@ contract V3Aggregator is
 
         decreaseUnusedAmounts(_strategy, unusedAmount0, unusedAmount1);
 
-        amount0 = amount0.add(secondaryAmount0).add(unusedAmount0);
-        amount1 = amount1.add(secondaryAmount1).add(unusedAmount1);
+        amount0 = amount0.add(unusedAmount0);
+        amount1 = amount1.add(unusedAmount1);
 
         require(
             _amount0Min <= amount0 && _amount1Min <= amount1,
@@ -264,17 +244,12 @@ contract V3Aggregator is
         if (strategy.hold()) {
             // burn liquidity
             (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
+
+            IUnboundStrategy.Tick[] memory ticks = oldStrategy.ticks;
             // store the values contract is holding
             increaseUnusedAmounts(_strategy, amount0, amount1);
-
             // update amounts in the strategy
-            updateStrategy(
-                _strategy,
-                oldStrategy.amount0.sub(amount0),
-                oldStrategy.amount1.sub(amount1),
-                0,
-                0
-            );
+            updateStrategy(_strategy, ticks);
         } else if (oldStrategy.hold) {
             // if hold has been enabled in previous update, deploy the hold
             // amount in the current ranges
@@ -298,52 +273,59 @@ contract V3Aggregator is
         }
     }
 
-    // function swapAndRedeploy(address _strategy)
-    //     internal
-    //     returns (uint256 amount0, uint256 amount1)
-    // {
-    //     IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-    //     IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-    //     Strategy storage newStrategy = strategies[_strategy];
+    function swapAndRedeploy(address _strategy)
+        internal
+        returns (uint256 amount0, uint256 amount1)
+    {
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+        Strategy storage newStrategy = strategies[_strategy];
 
-    //     // don't let strategy owner swap more than they manage
-    //     if (strategy.zeroToOne()) {
-    //         require(
-    //             uint256(strategy.swapAmount()) <=
-    //                 newStrategy.amount0.add(newStrategy.secondaryAmount0)
-    //         );
-    //     } else {
-    //         require(
-    //             uint256(strategy.swapAmount()) <=
-    //                 newStrategy.amount1.add(newStrategy.secondaryAmount1)
-    //         );
-    //     }
+        // don't let strategy owner swap more than they manage
+        // TODO: Add a check to check total amounts managed by the liquidity
+        // if (strategy.zeroToOne()) {
+        //     require(
+        //         uint256(strategy.swapAmount()) <=
+        //             newStrategy.amount0.add(newStrategy.secondaryAmount0)
+        //     );
+        // } else {
+        //     require(
+        //         uint256(strategy.swapAmount()) <=
+        //             newStrategy.amount1.add(newStrategy.secondaryAmount1)
+        //     );
+        // }
 
-    //     uint256 amountOut;
+        uint256 amountOut;
 
-    //     // swap tokens
-    //     (amountOut) = swap(
-    //         address(pool),
-    //         _strategy,
-    //         strategy.zeroToOne(),
-    //         strategy.swapAmount(),
-    //         strategy.allowedSlippage()
-    //     );
+        // swap tokens
+        (amountOut) = swap(
+            address(pool),
+            _strategy,
+            strategy.zeroToOne(),
+            strategy.swapAmount(),
+            strategy.allowedSlippage()
+        );
 
-    //     // the amount going in mint liquidity should be influenced by swap amount;
-    //     (secondaryAmount0, secondaryAmount1) = mintLiquidity(
-    //         address(pool),
-    //         strategy.tickLower(),
-    //         strategy.tickUpper(),
-    //         amount0,
-    //         amount1,
-    //         address(this)
-    //     );
+        for (uint256 i = 0; i < strategy.ticks().length; i++) {
+            IUnboundStrategy.Tick[] memory ticks = strategy.ticks();
+            IUnboundStrategy.Tick memory tick = ticks[i];
 
-    //     // mint liquidity in loops
+            // the amount going in mint liquidity should be influenced by swap amount;
+            (amount0, amount1) = mintLiquidity(
+                address(pool),
+                tick.tickLower,
+                tick.tickUpper,
+                tick.amount0,
+                tick.amount1,
+                address(this)
+            );
 
-    //     for (uint256 i = 0; i < _users.length; i++) {}
-    // }
+            updateUsedAmounts(_strategy, strategy.ticks(), i, amount0, amount1);
+
+            amount0 = amount0.add(amount0);
+            amount1 = amount1.add(amount1);
+        }
+    }
 
     /**
      * @notice Redeploys the liquidity
@@ -363,111 +345,41 @@ contract V3Aggregator is
         uint256 secondaryAmount1;
 
         if (strategy.swapAmount() > 0) {
-            // don't let strategy owner swap more than they manage
-            if (strategy.zeroToOne()) {
-                require(
-                    uint256(strategy.swapAmount()) <=
-                        newStrategy.amount0.add(newStrategy.secondaryAmount0)
-                );
-            } else {
-                require(
-                    uint256(strategy.swapAmount()) <=
-                        newStrategy.amount1.add(newStrategy.secondaryAmount1)
-                );
-            }
-
-            uint256 amountOut;
-
-            // swap tokens
-            (amountOut) = swap(
-                address(pool),
-                _strategy,
-                strategy.zeroToOne(),
-                strategy.swapAmount(),
-                strategy.allowedSlippage()
-            );
-
-            (uint160 newSqrtRatioX96, , , , , , ) = pool.slot0();
-
-            // update mint liquidity variables according to swap amounts
-            if (strategy.zeroToOne()) {
-                amount0 = _amount0 - uint256(strategy.swapAmount());
-                amount1 = _amount1 + amountOut;
-            } else {
-                amount0 = _amount0 + amountOut;
-                amount1 = _amount1 - uint256(strategy.swapAmount());
-            }
-
-            // the amount going in mint liquidity should be influenced by swap amount;
-            (secondaryAmount0, secondaryAmount1) = mintLiquidity(
-                address(pool),
-                strategy.tickLower(),
-                strategy.tickUpper(),
-                amount0,
-                amount1,
-                address(this)
-            );
-
-            // update strategy
-            updateStrategy(_strategy, secondaryAmount0, secondaryAmount1, 0, 0);
+            (amount0, amount1) = swapAndRedeploy(_strategy);
 
             // unused amounts
-            amount0 = amount0 - secondaryAmount0;
-            amount1 = amount1 - secondaryAmount1;
+            amount0 = _amount0 - amount0;
+            amount1 = _amount1 - amount1;
 
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
         } else {
-            // mint liquidity in range order
-            (amount0, amount1) = mintLiquidity(
-                address(pool),
-                strategy.tickLower(),
-                strategy.tickUpper(),
-                _amount0,
-                _amount1,
-                address(this)
-            );
+            for (uint256 i = 0; i < strategy.ticks().length; i++) {
+                IUnboundStrategy.Tick[] memory ticks = strategy.ticks();
 
-            // mint remaining liquidity in limit order
-            if (
-                strategy.secondaryTickLower() != 0 &&
-                strategy.secondaryTickUpper() != 0
-            ) {
-                uint128 secondaryLiquidity =
-                    LiquidityHelper.getLiquidityForAmounts(
-                        address(pool),
-                        strategy.secondaryTickLower(),
-                        strategy.secondaryTickUpper(),
-                        _amount0 - amount0,
-                        _amount1 - amount1
-                    );
-                if (secondaryLiquidity > 0) {
-                    secondaryAmount0 = _amount0 - amount0;
-                    secondaryAmount1 = _amount1 - amount1;
+                IUnboundStrategy.Tick memory tick = ticks[i];
 
-                    (secondaryAmount0, secondaryAmount1) = mintLiquidity(
-                        address(pool),
-                        strategy.secondaryTickLower(),
-                        strategy.secondaryTickUpper(),
-                        secondaryAmount0,
-                        secondaryAmount1,
-                        address(this)
-                    );
+                // the amount going in mint liquidity should be influenced by swap amount;
+                (amount0, amount1) = mintLiquidity(
+                    address(pool),
+                    tick.tickLower,
+                    tick.tickUpper,
+                    tick.amount0,
+                    tick.amount1,
+                    address(this)
+                );
 
-                    // // TODO: update amounts rightly
-                    // amount0 = amount0 + secondaryAmount0;
-                    // amount1 = amount1 + secondaryAmount1;
-                }
+                updateUsedAmounts(
+                    _strategy,
+                    strategy.ticks(),
+                    i,
+                    amount0,
+                    amount1
+                );
+
+                amount0 = amount0.add(amount0);
+                amount1 = amount1.add(amount1);
             }
-
-            // update strategy
-            updateStrategy(
-                _strategy,
-                amount0,
-                amount1,
-                secondaryAmount0,
-                secondaryAmount1
-            );
 
             // to calculate unused amount substract the deployed amounts from original amounts
             amount0 = _amount0 - amount0;

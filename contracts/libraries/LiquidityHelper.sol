@@ -5,6 +5,8 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
+import "../interfaces/IUnboundStrategy.sol";
+
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
 
@@ -71,36 +73,27 @@ library LiquidityHelper {
     /**
      * @dev Get the liquidity between current ticks
      * @param _pool Address of the pool
-     * @param _tickLower Lower tick of the range
-     * @param _tickUpper Upper tick of the range
+     * @param _ticks Array of ticks
      */
     function getCurrentLiquidity(
         address _pool,
-        int24 _tickLower,
-        int24 _tickUpper,
-        int24 _secondaryTickLower,
-        int24 _secondaryTickUpper
+        IUnboundStrategy.Tick[] memory _ticks
     ) internal view returns (uint128 liquidity) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
-        // get current liquidity for range order
-        (uint128 rangeOrderLiquidity, , , , ) =
-            pool.positions(
-                PositionKey.compute(address(this), _tickLower, _tickUpper)
-            );
+        for (uint256 i = 0; i < _ticks.length; i++) {
+            IUnboundStrategy.Tick memory tick = _ticks[i];
 
-        // get current liquidity for limit order
-        (uint128 limitOrderLiquidity, , , , ) =
-            pool.positions(
-                PositionKey.compute(
-                    address(this),
-                    _secondaryTickLower,
-                    _secondaryTickUpper
-                )
-            );
-
-        // add both liquiditys
-        liquidity = rangeOrderLiquidity + limitOrderLiquidity;
+            (uint128 currentLiquidity, , , , ) =
+                pool.positions(
+                    PositionKey.compute(
+                        address(this),
+                        tick.tickLower,
+                        tick.tickUpper
+                    )
+                );
+            liquidity += currentLiquidity;
+        }
     }
 
     function getCurrentFeeGrowth(
