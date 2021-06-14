@@ -25,6 +25,9 @@ contract UniswapPoolActions is
 {
     using SafeMath for uint256;
 
+    // used as temporary variable to verify the pool
+    address pool_;
+
     event FeesClaimed(
         address indexed pool,
         address indexed strategy,
@@ -69,7 +72,8 @@ contract UniswapPoolActions is
                 _amount0,
                 _amount1
             );
-
+        // set temparary variable for callback verification
+        pool_ = _pool;
         // add liquidity to Uniswap pool
         (amount0, amount1) = pool.mint(
             address(this),
@@ -227,6 +231,9 @@ contract UniswapPoolActions is
     ) internal returns (uint256 amountOut) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
+        // set temparary variable for callback verification
+        pool_ = _pool;
+
         (int256 amount0, int256 amount1) =
             pool.swap(
                 address(this),
@@ -251,9 +258,9 @@ contract UniswapPoolActions is
     ) external override {
         SwapCallbackData memory decoded = abi.decode(data, (SwapCallbackData));
         // check if the callback is received from Uniswap V3 Pool
-        require(msg.sender == address(decoded.pool));
-
-        IUniswapV3Pool pool = IUniswapV3Pool(decoded.pool);
+        require(msg.sender == pool_);
+        IUniswapV3Pool pool = IUniswapV3Pool(pool_);
+        delete pool_;
 
         if (decoded.zeroToOne) {
             TransferHelper.safeTransfer(
@@ -281,9 +288,9 @@ contract UniswapPoolActions is
         MintCallbackData memory decoded = abi.decode(data, (MintCallbackData));
 
         // check if the callback is received from Uniswap V3 Pool
-        require(msg.sender == address(decoded.pool));
-
-        IUniswapV3Pool pool = IUniswapV3Pool(decoded.pool);
+        require(msg.sender == pool_);
+        IUniswapV3Pool pool = IUniswapV3Pool(pool_);
+        delete pool_;
 
         if (decoded.payer == address(this)) {
             // transfer tokens already in the contract
