@@ -13,6 +13,13 @@ import "hardhat/console.sol";
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
+    struct Range {
+        uint256 amount0;
+        uint256 amount1;
+        int24 tickUpper;
+        int24 tickLower;
+    }
+
     struct Strategy {
         uint256 amount0; // used amount0
         uint256 amount1; // used amount1
@@ -22,6 +29,7 @@ contract AggregatorManagement is AggregatorBase {
         int24 tickUpper;
         int24 secondaryTickLower;
         int24 secondaryTickUpper;
+        Range[] ranges;
         bool swap;
         bool hold;
     }

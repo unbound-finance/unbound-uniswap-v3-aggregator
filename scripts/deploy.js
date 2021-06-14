@@ -78,7 +78,7 @@ async function main() {
   const governance = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
 
   // deploy aggregator contract
-  const v3Aggregator = await V3Aggregator.deploy(governance);
+  // const v3Aggregator = await V3Aggregator.deploy(governance);
 
   // deploy strategy contract
   const strategy = await TestStrategy.deploy(

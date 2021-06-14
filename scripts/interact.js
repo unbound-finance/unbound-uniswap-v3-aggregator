@@ -14,9 +14,9 @@ let token1;
 
 async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
-  const _strategy = "0x480800f922425688fA59b3e1918C988eB90F2137";
-  const _aggregator = "0x99Ebb146235D14AD205D825ec550e91b283FEd0b";
-  const _pool = "0xc2e9f25be6257c210d7adf0d4cd6e3e881ba25f8";
+  const _strategy = "0x264A140E9B19c1174aaA77C923b2Cb0Ac90B736a";
+  const _aggregator = "0xF321056d79b919eE1aA6084495C5A37a29aad06B";
+  const _pool = "0x5A12f0272d2D5f44778e2fcB14Dc0439D4B7b688";
   const _token0 = "0xBf20a11bD3d13D643954a907d03512AC6E8893Ac";
   const _token1 = "0x760A5D9072FFf27F488a6785F23a6ad2abB3525a";
 
@@ -46,8 +46,11 @@ async function main() {
   const shares = await aggregator.shares(_strategy, owner);
   console.log(token0Real);
 
-  console.log({ shares, unused: unused, getStrategy: getStrategy });
+  console.log("token0", await pool.token0())
 
+  console.log({ shares, unused: unused, getStrategy: getStrategy });
+  
+  await addLiquidity(_strategy);
   // await removeLiquidity(_strategy);
   // const shares = await aggregator.shares(_strategy, owner);
   // const unused = await aggregator.unused(_strategy);
@@ -69,7 +72,7 @@ async function main() {
   //   added: added.hash,
   //   removed: removed.hash
   // })
-  await removeLiquidity(_strategy);
+  // await removeLiquidity(_strategy);
 
   // console.log({ getStrategy, shares, unused, totalShares });
 
@@ -134,7 +137,7 @@ async function addLiquidity(_strategy) {
     "0",
     "0",
     {
-      gasLimit: 1000000,
+      gasLimit: 10000000,
     }
   );
   console.log(tx);
@@ -145,7 +148,7 @@ async function removeLiquidity(_strategy) {
     _strategy,
     "875000000000000000000",
     "0",
-    "0"
+    "0",
   );
   console.log(tx);
 }

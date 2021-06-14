@@ -208,7 +208,9 @@ contract V3Aggregator is
             unusedAmount0 = unusedAmount0.mul(_shares).div(
                 totalShares[_strategy]
             );
-        } else if (unusedAmount1 > 1000) {
+        }
+
+        if (unusedAmount1 > 1000) {
             unusedAmount1 = unusedAmount1.mul(_shares).div(
                 totalShares[_strategy]
             );
@@ -264,19 +266,25 @@ contract V3Aggregator is
             (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
             // store the values contract is holding
             increaseUnusedAmounts(_strategy, amount0, amount1);
+
+            // update amounts in the strategy
+            updateStrategy(
+                _strategy,
+                oldStrategy.amount0.sub(amount0),
+                oldStrategy.amount1.sub(amount1),
+                0,
+                0
+            );
         } else if (oldStrategy.hold) {
             // if hold has been enabled in previous update, deploy the hold
             // amount in the current ranges
             (amount0, amount1) = getUnusedAmounts(_strategy);
 
             // redploy the liquidity
-            (newAmount0, newAmount1) = redeploy(
-                _strategy,
-                amount0,
-                amount1
-            );
+            (newAmount0, newAmount1) = redeploy(_strategy, amount0, amount1);
         } else {
-            (uint256 unusedAmount0, uint256 unusedAmount1) = getUnusedAmounts(_strategy);
+            (uint256 unusedAmount0, uint256 unusedAmount1) =
+                getUnusedAmounts(_strategy);
 
             // remove all the liquidity
             (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
@@ -289,6 +297,53 @@ contract V3Aggregator is
             );
         }
     }
+
+    // function swapAndRedeploy(address _strategy)
+    //     internal
+    //     returns (uint256 amount0, uint256 amount1)
+    // {
+    //     IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+    //     IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+    //     Strategy storage newStrategy = strategies[_strategy];
+
+    //     // don't let strategy owner swap more than they manage
+    //     if (strategy.zeroToOne()) {
+    //         require(
+    //             uint256(strategy.swapAmount()) <=
+    //                 newStrategy.amount0.add(newStrategy.secondaryAmount0)
+    //         );
+    //     } else {
+    //         require(
+    //             uint256(strategy.swapAmount()) <=
+    //                 newStrategy.amount1.add(newStrategy.secondaryAmount1)
+    //         );
+    //     }
+
+    //     uint256 amountOut;
+
+    //     // swap tokens
+    //     (amountOut) = swap(
+    //         address(pool),
+    //         _strategy,
+    //         strategy.zeroToOne(),
+    //         strategy.swapAmount(),
+    //         strategy.allowedSlippage()
+    //     );
+
+    //     // the amount going in mint liquidity should be influenced by swap amount;
+    //     (secondaryAmount0, secondaryAmount1) = mintLiquidity(
+    //         address(pool),
+    //         strategy.tickLower(),
+    //         strategy.tickUpper(),
+    //         amount0,
+    //         amount1,
+    //         address(this)
+    //     );
+
+    //     // mint liquidity in loops
+
+    //     for (uint256 i = 0; i < _users.length; i++) {}
+    // }
 
     /**
      * @notice Redeploys the liquidity
@@ -399,8 +454,9 @@ contract V3Aggregator is
                         address(this)
                     );
 
-                    amount0 = amount0 + secondaryAmount0;
-                    amount1 = amount1 + secondaryAmount1;
+                    // // TODO: update amounts rightly
+                    // amount0 = amount0 + secondaryAmount0;
+                    // amount1 = amount1 + secondaryAmount1;
                 }
             }
 
