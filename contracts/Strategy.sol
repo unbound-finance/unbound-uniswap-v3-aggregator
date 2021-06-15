@@ -60,7 +60,7 @@ contract UnboundStrategy {
 
     // Modifiers
     modifier isInitialized() {
-        require(initialized, "Ownable: caller is not the operator");
+        require(initialized, "Ownable: strategy not initialized");
         _;
     }
 
@@ -108,8 +108,6 @@ contract UnboundStrategy {
      */
     function changeTicksAndRebalance(Tick[] memory _ticks)
         external
-        onlyOperator
-        isInitialized
     {
         // TODO: Make sure we check the maximum added amounts from aggregator, only allow to add amounts the strtategy is holding in aggregator
         require(ticks.length <= 5, "invalid number of ticks");

@@ -156,7 +156,17 @@ describe("Remove Liquidity", function () {
 
 describe("Rebalance", function () {
   beforeEach(async function () {});
-  it("should rebalance using normal range order and store unused", async function () {});
+  it("should rebalance using normal range order and store unused", async function () {
+    // change the ticks
+    await strategy.changeTicksAndRebalance([
+      [
+        "1000",
+        "1000",
+        secondaryTickLower,
+        secondaryTickUpper,
+      ],
+    ]);
+  });
 });
 
 function getPositionKey(address, lowerTick, upperTick) {
