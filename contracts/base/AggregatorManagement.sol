@@ -13,13 +13,6 @@ import "hardhat/console.sol";
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
-    struct Tick {
-        uint256 amount0;
-        uint256 amount1;
-        int24 tickUpper;
-        int24 tickLower;
-    }
-
     struct Strategy {
         // uint256 amount0; // used amount0
         // uint256 amount1; // used amount1
@@ -211,22 +204,19 @@ contract AggregatorManagement is AggregatorBase {
     /**
      * @dev Updates strategy data for future use
      * @param _strategy Address of the strategy
-     * @param _ticks Array of the new ticks
      */
     function updateStrategy(
-        address _strategy,
-        IUnboundStrategy.Tick[] memory _ticks
+        address _strategy
     ) internal {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         Strategy storage newStrategy = strategies[_strategy];
         newStrategy.hold = strategy.hold();
         // update the ticks
-        updateTicks(false, _strategy, 0, 0, 0, _ticks);
+        updateTicks(false, _strategy, 0, 0, 0);
     }
 
     function updateUsedAmounts(
         address _strategy,
-        IUnboundStrategy.Tick[] memory _ticks,
         uint256 _tickId,
         uint256 _amount0,
         uint256 _amount1
@@ -237,36 +227,40 @@ contract AggregatorManagement is AggregatorBase {
         IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
 
         // update ticks
-        updateTicks(true, _strategy, _tickId, _amount0, _amount1, _ticks);
+        updateTicks(true, _strategy, _tickId, _amount0, _amount1);
     }
 
     /**
      * @dev Increase amounts in the current ticks
-     * @param _ticks The array of ticks
+     * @param _strategy The array of ticks
+     * @param _tickId The tick to update
      * @param _amount0 Amount of token0 to be increased
      * @param _amount1 Amount of token1 to be increased
      */
     function increaseUsedAmounts(
         address _strategy,
-        IUnboundStrategy.Tick[] memory _ticks,
         uint256 _tickId,
         uint256 _amount0,
         uint256 _amount1
     ) internal {
         Strategy storage strategy = strategies[_strategy];
 
-        // store old amounts in memory to use later
-        IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
+        if (strategy.ticks.length == 0) {
+            // update ticks
+            updateTicks(true, _strategy, _tickId, _amount0, _amount0);
+        } else {
+            // store old amounts in memory to use later
+            IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
 
-        // update ticks
-        updateTicks(
-            true,
-            _strategy,
-            _tickId,
-            tick.amount0.add(_amount0),
-            tick.amount1.add(_amount1),
-            _ticks
-        );
+            // update ticks
+            updateTicks(
+                true,
+                _strategy,
+                _tickId,
+                tick.amount0.add(_amount0),
+                tick.amount1.add(_amount1)
+            );
+        }
     }
 
     function updateTicks(
@@ -274,12 +268,11 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _tickId,
         uint256 _amount0,
-        uint256 _amount1,
-        IUnboundStrategy.Tick[] memory _ticks
+        uint256 _amount1
     ) internal {
         Strategy storage strategy = strategies[_strategy];
         delete strategy.ticks;
-        for (uint256 i = 0; i < _ticks.length; i++) {
+        for (uint256 i = 0; i < strategy.ticks.length; i++) {
             IUnboundStrategy.Tick memory tick = strategy.ticks[i];
             IUnboundStrategy.Tick memory newTick;
             newTick.tickLower = tick.tickLower;
@@ -300,13 +293,13 @@ contract AggregatorManagement is AggregatorBase {
 
     /**
      * @dev Decrease amounts in the current ticks
-     * @param _ticks The array of ticks
+     * @param _strategy Address of strategy
+     * @param _tickId Id of the tick to update
      * @param _amount0 Amount of token0 to be increased
      * @param _amount1 Amount of token1 to be increased
      */
     function decreaseUsedAmounts(
         address _strategy,
-        IUnboundStrategy.Tick[] memory _ticks,
         uint256 _tickId,
         uint256 _amount0,
         uint256 _amount1
@@ -322,8 +315,7 @@ contract AggregatorManagement is AggregatorBase {
             _strategy,
             _tickId,
             tick.amount0.sub(_amount0),
-            tick.amount1.sub(_amount1),
-            _ticks
+            tick.amount1.sub(_amount1)
         );
     }
 }

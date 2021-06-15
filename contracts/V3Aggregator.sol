@@ -88,26 +88,24 @@ contract V3Aggregator is
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage oldStrategy = strategies[_strategy];
 
-        IUnboundStrategy.Tick[] memory ticks = strategy.ticks();
+        // require(strategy.initialized(), "not initilized");
+
 
         uint128 liquidityBefore =
-            LiquidityHelper.getCurrentLiquidity(address(pool), ticks);
+            LiquidityHelper.getCurrentLiquidity(address(pool), _strategy);
 
         // index 0 will always be an primary tick
         (amount0, amount1) = mintLiquidity(
             address(pool),
-            ticks[0].tickLower,
-            ticks[0].tickUpper,
+            strategy.ticks(0).tickLower,
+            strategy.ticks(0).tickUpper,
             _amount0,
             _amount1,
             msg.sender
         );
 
         uint128 liquidityAfter =
-            LiquidityHelper.getCurrentLiquidity(
-                address(pool),
-                strategy.ticks()
-            );
+            LiquidityHelper.getCurrentLiquidity(address(pool), _strategy);
 
         share = issueShare(
             _strategy,
@@ -123,7 +121,7 @@ contract V3Aggregator is
             "Aggregator: Slippage"
         );
 
-        increaseUsedAmounts(_strategy, ticks, 0, amount0, amount1);
+        increaseUsedAmounts(_strategy, 0, amount0, amount1);
 
         emit AddLiquidity(_strategy, amount0, amount1);
     }
@@ -169,13 +167,7 @@ contract V3Aggregator is
             amount1 = amount1.add(amount1);
 
             // decrease used amounts for each tick
-            decreaseUsedAmounts(
-                _strategy,
-                oldStrategy.ticks,
-                i,
-                amount0,
-                amount1
-            );
+            decreaseUsedAmounts(_strategy, i, amount0, amount1);
         }
 
         uint256 unusedAmount0;
@@ -249,7 +241,7 @@ contract V3Aggregator is
             // store the values contract is holding
             increaseUnusedAmounts(_strategy, amount0, amount1);
             // update amounts in the strategy
-            updateStrategy(_strategy, ticks);
+            updateStrategy(_strategy);
         } else if (oldStrategy.hold) {
             // if hold has been enabled in previous update, deploy the hold
             // amount in the current ranges
@@ -306,9 +298,8 @@ contract V3Aggregator is
             strategy.allowedSlippage()
         );
 
-        for (uint256 i = 0; i < strategy.ticks().length; i++) {
-            IUnboundStrategy.Tick[] memory ticks = strategy.ticks();
-            IUnboundStrategy.Tick memory tick = ticks[i];
+        for (uint256 i = 0; i < strategy.tickLength(); i++) {
+            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
 
             // the amount going in mint liquidity should be influenced by swap amount;
             (amount0, amount1) = mintLiquidity(
@@ -320,7 +311,7 @@ contract V3Aggregator is
                 address(this)
             );
 
-            updateUsedAmounts(_strategy, strategy.ticks(), i, amount0, amount1);
+            updateUsedAmounts(_strategy, i, amount0, amount1);
 
             amount0 = amount0.add(amount0);
             amount1 = amount1.add(amount1);
@@ -354,10 +345,8 @@ contract V3Aggregator is
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
         } else {
-            for (uint256 i = 0; i < strategy.ticks().length; i++) {
-                IUnboundStrategy.Tick[] memory ticks = strategy.ticks();
-
-                IUnboundStrategy.Tick memory tick = ticks[i];
+            for (uint256 i = 0; i < strategy.tickLength(); i++) {
+                IUnboundStrategy.Tick memory tick = strategy.ticks(i);
 
                 // the amount going in mint liquidity should be influenced by swap amount;
                 (amount0, amount1) = mintLiquidity(
@@ -371,7 +360,6 @@ contract V3Aggregator is
 
                 updateUsedAmounts(
                     _strategy,
-                    strategy.ticks(),
                     i,
                     amount0,
                     amount1

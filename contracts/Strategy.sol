@@ -6,6 +6,7 @@ pragma abicoder v2;
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
 
 // TODO: Add events on each action
 
@@ -13,13 +14,13 @@ interface IAggregator {
     function rebalance(address _strategy) external;
 }
 
-contract TestStrategy {
-    address public pool;
+contract UnboundStrategy {
+    address public immutable pool;
 
     uint256 public fee;
     address public feeTo;
 
-    bool initialized;
+    bool public initialized;
 
     bool public hold;
 
@@ -35,8 +36,8 @@ contract TestStrategy {
     struct Tick {
         uint256 amount0;
         uint256 amount1;
-        int24 tickUpper;
         int24 tickLower;
+        int24 tickUpper;
     }
 
     Tick[] public ticks;
@@ -73,6 +74,7 @@ contract TestStrategy {
      * @param _ticks New ticks
      */
     function changeTicks(Tick[] memory _ticks) internal {
+        delete ticks;
         // TODO: Add a check that two tick upper and tick lowers are not  in array cannot be same
         for (uint256 i = 0; i < _ticks.length; i++) {
             Tick storage tick;
@@ -90,7 +92,14 @@ contract TestStrategy {
      */
     function initialize(Tick[] memory _ticks) external onlyOperator {
         require(!initialized, "strategy already initialised");
-        changeTicks(_ticks);
+        for (uint256 i = 0; i < _ticks.length; i++) {
+            Tick storage tick;
+            tick.amount0 = 0;
+            tick.amount1 = 0;
+            tick.tickLower = _ticks[i].tickLower;
+            tick.tickUpper = _ticks[i].tickUpper;
+            ticks.push(tick);
+        }
     }
 
     /**
@@ -140,5 +149,9 @@ contract TestStrategy {
      */
     function changeFeeTo(address _newFeeTo) external onlyOperator {
         feeTo = _newFeeTo;
+    }
+
+    function tickLength() public view returns (uint256 length) {
+        length = ticks.length;
     }
 }

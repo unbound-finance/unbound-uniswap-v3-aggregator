@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity >=0.7.6;
+pragma abicoder v2;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
@@ -9,6 +10,8 @@ import "../interfaces/IUnboundStrategy.sol";
 
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
+
+import "hardhat/console.sol";
 
 library LiquidityHelper {
     using SafeMath for uint256;
@@ -73,16 +76,18 @@ library LiquidityHelper {
     /**
      * @dev Get the liquidity between current ticks
      * @param _pool Address of the pool
-     * @param _ticks Array of ticks
+     * @param _strategy Address of the strategy
      */
-    function getCurrentLiquidity(
-        address _pool,
-        IUnboundStrategy.Tick[] memory _ticks
-    ) internal view returns (uint128 liquidity) {
+    function getCurrentLiquidity(address _pool, address _strategy)
+        internal
+        view
+        returns (uint128 liquidity)
+    {
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
-        for (uint256 i = 0; i < _ticks.length; i++) {
-            IUnboundStrategy.Tick memory tick = _ticks[i];
+        for (uint256 i = 0; i < strategy.tickLength(); i++) {
+            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
 
             (uint128 currentLiquidity, , , , ) =
                 pool.positions(

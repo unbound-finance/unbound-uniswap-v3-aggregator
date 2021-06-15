@@ -10,7 +10,7 @@ async function main() {
   const factoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 
   const TestToken = await ethers.getContractFactory("ERC20");
-  const TestStrategy = await ethers.getContractFactory("TestStrategy");
+  const TestStrategy = await ethers.getContractFactory("UnboundStrategy");
   const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
 
   const factory = await ethers.getContractAt(
@@ -78,19 +78,17 @@ async function main() {
   const governance = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
 
   // deploy aggregator contract
-  // const v3Aggregator = await V3Aggregator.deploy(governance);
+  const v3Aggregator = await V3Aggregator.deploy(governance);
 
   // deploy strategy contract
-  const strategy = await TestStrategy.deploy(
-    tickLower,
-    tickUpper,
-    0,
-    0,
+  strategy = await TestStrategy.deploy(
+    v3Aggregator.address,
     pool.address,
-    "0",
-    owner,
-    v3Aggregator.address
+    governance
   );
+
+  // intialize the strategy
+  await strategy.initialize([[0, 0, tickLower, tickUpper]]);
 
   // console.log contract addresses
   console.log("🎉 Contracts Deployed");

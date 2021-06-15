@@ -6,15 +6,19 @@ interface IUnboundStrategy {
     struct Tick {
         uint256 amount0;
         uint256 amount1;
-        int24 tickUpper;
         int24 tickLower;
+        int24 tickUpper;
     }
 
     // get ticks
-    function ticks() external view returns (Tick[] memory);
+    function ticks(uint256 index) external view returns (Tick memory);
 
     // address of the pool
     function pool() external view returns (address);
+
+    function initialized() external view returns (bool);
+
+    function tickLength() external view returns (uint256);
 
     // the current lower tick to place range order
     function tickLower() external view returns (int24);

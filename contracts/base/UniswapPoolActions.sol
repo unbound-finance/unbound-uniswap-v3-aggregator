@@ -222,7 +222,6 @@ contract UniswapPoolActions is
         }
     }
 
-    // TODO: If on hold in add liquidity add to hold
     function swapExactInput(
         address _pool,
         bool _zeroToOne,
