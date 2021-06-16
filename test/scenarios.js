@@ -506,11 +506,11 @@ describe("Scenarios", () =>{
 
     
 
-    const amount0PrimaryA = amount0SentA.mul(sharesUserA).div(totalSharesSecond);
-    const amount1PrimaryA = amount1SentA.mul(sharesUserA).div(totalSharesSecond);
+    const amount0PrimaryA = amount0SentA.add(amount0SentB).mul(sharesUserA).div(totalSharesSecond);
+    const amount1PrimaryA = amount1SentA.add(amount1SentB).mul(sharesUserA).div(totalSharesSecond);
 
-    const amount0PrimaryB = amount0SentB.mul(sharesUserB).div(totalSharesSecond);
-    const amount1PrimaryB = amount1SentB.mul(sharesUserB).div(totalSharesSecond);
+    const amount0PrimaryB = amount0SentB.add(amount0SentA).mul(sharesUserB).div(totalSharesSecond);
+    const amount1PrimaryB = amount1SentB.add(amount1SentA).mul(sharesUserB).div(totalSharesSecond);
     
     // Breakage here //
     expect(amount0PrimaryA.toString()).to.equal(amount0SentA.toString());
@@ -518,7 +518,7 @@ describe("Scenarios", () =>{
 
     expect(amount0PrimaryB.toString()).to.equal(amount0SentB.toString());
     expect(amount1PrimaryB.toString()).to.equal(amount1SentB.toString());
-    
+
 
     await aggregator.connect(userA).removeLiquidity(newStrategy.address, sharesUserA.toString(), 0, 0);
 
