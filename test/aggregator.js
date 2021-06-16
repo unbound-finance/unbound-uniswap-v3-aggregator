@@ -21,6 +21,7 @@ let tickUpper;
 let secondaryTickLower;
 let secondaryTickUpper;
 let TestStrategy;
+let strategyFactory;
 
 const amountB = "200000000000000000000000";
 const amountA = "100000000000000000000";
@@ -34,15 +35,17 @@ beforeEach(async function () {
   //   const tickMath = await TickMath.deploy();
 
   const Factory = await ethers.getContractFactory("UniswapV3Factory");
+  const StrategyFactory = await ethers.getContractFactory("StrategyFactory");
 
   factory = await Factory.deploy();
 
   // create a pool
   const TestToken = await ethers.getContractFactory("ERC20");
-  TestStrategy = await ethers.getContractFactory("UnboundStrategy");
+  const TestStrategy = await ethers.getContractFactory("UnboundStrategy");
   const Aggregator = await ethers.getContractFactory("V3Aggregator");
 
   aggregator = await Aggregator.deploy(owner.address);
+  strategyFactory = await StrategyFactory.deploy(aggregator.address);
 
   // deployments
   const testToken0 = await TestToken.deploy(
@@ -85,11 +88,11 @@ beforeEach(async function () {
   pool = await ethers.getContractAt("UniswapV3Pool", poolAddress);
 
   // add initial liquidity to start the pool
-  tickLower = calculateTick(2950, 60);
-  tickUpper = calculateTick(3600, 60);
+  tickLower = calculateTick(2500, 60);
+  tickUpper = calculateTick(3500, 60);
 
-  secondaryTickLower = calculateTick(2000, 60);
-  secondaryTickUpper = calculateTick(4000, 60);
+  secondaryTickLower = calculateTick(2700, 60);
+  secondaryTickUpper = calculateTick(3300, 60);
 
   // deploy strategy contract
   strategy = await TestStrategy.deploy(
@@ -130,6 +133,9 @@ beforeEach(async function () {
   await token0.approve(aggregator.address, balanceOf0);
   await token1.approve(aggregator.address, balanceOf1);
 
+  const tick = await aggregator.getTicks(strategy.address);
+  console.log(tick);
+
   // add some liquidity to the pool
   await aggregator.addLiquidity(
     strategy.address,
@@ -147,25 +153,102 @@ describe("Add Liquidity", function () {
 describe("Remove Liquidity", function () {
   beforeEach(async function () {});
   it("should be able to remove whole liquidity", async function () {
-    // get shares
     const shares = await aggregator.shares(strategy.address, owner.address);
-    // remove liquidity
     await aggregator.removeLiquidity(strategy.address, shares, 0, 0);
+  });
+});
+
+describe("Factory Test", function () {
+  it("should deploy the strategy from factory and add liquidity", async function () {
+    strategyFactory.createStrategy(pool.address, owner.address);
+
+    const strategy0 = await ethers.getContractAt(
+      "UnboundStrategy",
+      "0xb4dc171c0edec8c0032cd0f2d30921c09fa35e34"
+    );
+
+    await strategy0.initialize([[0, 0, tickLower, tickUpper]]);
+
+    await aggregator.addLiquidity(
+      strategy0.address,
+      "100000000000000000000",
+      "100000000000000000000",
+      0,
+      0
+    );
   });
 });
 
 describe("Rebalance", function () {
   beforeEach(async function () {});
   it("should rebalance using normal range order and store unused", async function () {
+    aggregator.addLiquidity(
+      strategy.address,
+      "100000000000000000000",
+      "100000000000000000000",
+      0,
+      0
+    );
+
+    const liquidityInRange = await aggregator.getTicks(strategy.address);
+    console.log(liquidityInRange);
+
     // change the ticks
     await strategy.changeTicksAndRebalance([
       [
-        "1000",
-        "1000",
+        toGwei(226173.97000201),
+        toGwei(750000050),
         secondaryTickLower,
         secondaryTickUpper,
       ],
+      [toGwei(226173.97000201), toGwei(750000050), tickLower, tickUpper],
     ]);
+
+    const shares = await aggregator.shares(strategy.address, owner.address);
+    await aggregator.removeLiquidity(strategy.address, shares, 0, 0);
+  });
+
+  it("should swap and rebalance", async function () {
+    aggregator.addLiquidity(
+      strategy.address,
+      "100000000000000000000",
+      "100000000000000000000",
+      0,
+      0
+    );
+
+    // const tick = await aggregator.getTick(strategy.address, 0);
+    const tick = await aggregator.getTicks(strategy.address);
+    console.log(tick);
+
+    console.log(consoleStrategy);
+
+    // // change the ticks
+    // await strategy.changeTicksAndRebalance([
+    //   [
+    //     toGwei(226173.97000201),
+    //     toGwei(750000050),
+    //     secondaryTickLower,
+    //     secondaryTickUpper,
+    //   ],
+    //   [toGwei(226173.97000201), toGwei(750000050), tickLower, tickUpper],
+    // ]);
+
+    const amount = ethers.utils.BigNumber.from("1000000000000000000");
+    console.log(amount);
+
+    await strategy.swapAndRebalance(
+      ethers.utils.BigNumber.from("1000000000000000000"),
+      ethers.utils.BigNumber.from("10000000"),
+      ethers.utils.BigNumber.from("10000000"),
+      [
+        toGwei(226173.97000201),
+        toGwei(750000050),
+        secondaryTickLower,
+        secondaryTickUpper,
+      ],
+      [toGwei(226173.97000201), toGwei(750000050), tickLower, tickUpper]
+    );
   });
 });
 

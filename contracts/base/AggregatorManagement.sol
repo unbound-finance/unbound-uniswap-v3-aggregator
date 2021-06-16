@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity >=0.7.6;
+pragma abicoder v2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/math/Math.sol";
@@ -14,14 +15,6 @@ contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
     struct Strategy {
-        // uint256 amount0; // used amount0
-        // uint256 amount1; // used amount1
-        // uint256 secondaryAmount0;
-        // uint256 secondaryAmount1;
-        // int24 tickLower;
-        // int24 tickUpper;
-        // int24 secondaryTickLower;
-        // int24 secondaryTickUpper;
         IUnboundStrategy.Tick[] ticks;
         bool hold;
     }
@@ -206,13 +199,17 @@ contract AggregatorManagement is AggregatorBase {
      * @param _strategy Address of the strategy
      */
     function updateStrategy(
-        address _strategy
+        address _strategy,
+        bool _specificUpdate,
+        uint256 _tickId,
+        uint256 _amount0,
+        uint256 _amount1
     ) internal {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         Strategy storage newStrategy = strategies[_strategy];
         newStrategy.hold = strategy.hold();
         // update the ticks
-        updateTicks(false, _strategy, 0, 0, 0);
+        updateTicks(_specificUpdate, _strategy, _tickId, _amount0, _amount1);
     }
 
     function updateUsedAmounts(
@@ -228,6 +225,38 @@ contract AggregatorManagement is AggregatorBase {
 
         // update ticks
         updateTicks(true, _strategy, _tickId, _amount0, _amount1);
+    }
+
+    function updateTicks(
+        bool specificUpdate,
+        address _strategy,
+        uint256 _tickId,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal {
+        Strategy storage localStrategy = strategies[_strategy];
+
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+
+        delete localStrategy.ticks;
+        for (uint256 i = 0; i < strategy.tickLength(); i++) {
+            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+
+            IUnboundStrategy.Tick memory newTick;
+            newTick.tickLower = tick.tickLower;
+            newTick.tickUpper = tick.tickUpper;
+            // if the provided tick id matches with index
+            // update the amounts directly else continue with old amounts
+            if (i == _tickId && specificUpdate) {
+                newTick.amount0 = _amount0;
+                newTick.amount1 = _amount1;
+            } else {
+                newTick.amount0 = tick.amount0;
+                newTick.amount1 = tick.amount1;
+            }
+
+            localStrategy.ticks.push(newTick);
+        }
     }
 
     /**
@@ -247,47 +276,17 @@ contract AggregatorManagement is AggregatorBase {
 
         if (strategy.ticks.length == 0) {
             // update ticks
-            updateTicks(true, _strategy, _tickId, _amount0, _amount0);
+            updateStrategy(_strategy, true, _tickId, _amount0, _amount1);
         } else {
             // store old amounts in memory to use later
             IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
-
-            // update ticks
-            updateTicks(
-                true,
+            updateStrategy(
                 _strategy,
+                true,
                 _tickId,
                 tick.amount0.add(_amount0),
                 tick.amount1.add(_amount1)
             );
-        }
-    }
-
-    function updateTicks(
-        bool specificUpdate,
-        address _strategy,
-        uint256 _tickId,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal {
-        Strategy storage strategy = strategies[_strategy];
-        delete strategy.ticks;
-        for (uint256 i = 0; i < strategy.ticks.length; i++) {
-            IUnboundStrategy.Tick memory tick = strategy.ticks[i];
-            IUnboundStrategy.Tick memory newTick;
-            newTick.tickLower = tick.tickLower;
-            newTick.tickUpper = tick.tickUpper;
-            // if the provided tick id matches with index
-            // update the amounts directly else continue with old amounts
-            if (i == _tickId && specificUpdate) {
-                newTick.amount0 = _amount0;
-                newTick.amount1 = _amount1;
-            } else {
-                newTick.amount0 = tick.amount0;
-                newTick.amount1 = tick.amount1;
-            }
-
-            strategy.ticks.push(newTick);
         }
     }
 
@@ -305,14 +304,12 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount1
     ) internal {
         Strategy storage strategy = strategies[_strategy];
-
-        // store old amounts in memory to use later
         IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
 
-        // update ticks
-        updateTicks(
-            true,
+        // store old amounts in memory to use later
+        updateStrategy(
             _strategy,
+            true,
             _tickId,
             tick.amount0.sub(_amount0),
             tick.amount1.sub(_amount1)

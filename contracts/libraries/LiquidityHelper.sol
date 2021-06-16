@@ -101,22 +101,6 @@ library LiquidityHelper {
         }
     }
 
-    function getCurrentFeeGrowth(
-        address _pool,
-        int24 _tickLower,
-        int24 _tickUpper
-    )
-        internal
-        returns (
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128
-        )
-    {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-
-        // get current liquidity for range order
-    }
-
     function getAccumulatedFees(
         address _pool,
         int24 _tickLower,

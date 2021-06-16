@@ -122,22 +122,33 @@ contract UniswapPoolActions is
         uint256 owed0;
         uint256 owed1;
 
+        console.log("burnLiquidity");
+        console.log(uint24(_tickLower));
+        console.log(uint24(_tickUpper));
+        console.log(_amount0);
+        console.log(_amount1);
+        console.log(liquidity);
+
         // burn liquidity
         if (liquidity > 0) {
             (owed0, owed1) = pool.burn(_tickLower, _tickUpper, liquidity);
         }
 
-        (uint128 fee0, uint128 fee1) =
-            LiquidityHelper.getAccumulatedFees(_pool, _tickLower, _tickUpper);
+        // (uint128 fee0, uint128 fee1) =
+        //     LiquidityHelper.getAccumulatedFees(_pool, _tickLower, _tickUpper);
 
         // collect fees
         (collect0, collect1) = pool.collect(
             address(this),
             _tickLower,
             _tickUpper,
-            uint128(_amount0) + fee0,
-            uint128(_amount1) + fee1
+            uint128(_amount0),
+            uint128(_amount1)
         );
+
+        console.log("collect amounts in burn");
+        console.log(collect0);
+        console.log(collect1);
 
         emit FeesClaimed(
             _strategy,
@@ -154,8 +165,8 @@ contract UniswapPoolActions is
     function burnAllLiquidity(address _strategy)
         internal
         returns (
-            uint256 amount0,
-            uint256 amount1,
+            uint256 collect0,
+            uint256 collect1,
             uint128 liquidity
         )
     {
@@ -176,10 +187,14 @@ contract UniswapPoolActions is
                     tick.amount1
                 );
 
-            amount0 = amount0.add(amount0);
-            amount1 = amount0.add(amount1);
+            collect0 = collect0.add(amount0);
+            collect1 = collect1.add(amount1);
             liquidity += liquidity;
         }
+
+        console.log("burn all liquidity");
+        console.log(collect0);
+        console.log(collect1);
     }
 
     // swaps with exact input single functionality
@@ -197,8 +212,8 @@ contract UniswapPoolActions is
         // TODO: Support partial slippage
         uint160 sqrtPriceLimitX96 =
             _zeroToOne
-                ? sqrtRatioX96 - (sqrtRatioX96 * _allowedSlippage) / 10000
-                : sqrtRatioX96 + (sqrtRatioX96 * _allowedSlippage) / 10000;
+                ? sqrtRatioX96 - (sqrtRatioX96 * _allowedSlippage) / 1e8
+                : sqrtRatioX96 + (sqrtRatioX96 * _allowedSlippage) / 1e8;
 
         (amountOut) = swapExactInput(
             _pool,
@@ -217,7 +232,7 @@ contract UniswapPoolActions is
         if (strategy.allowedPriceSlippage() > 0) {
             // check price P slippage
             require(
-                uint256(difference) <= strategy.allowedPriceSlippage() / 1e6
+                uint256(difference) <= strategy.allowedPriceSlippage().div(1e8)
             );
         }
     }

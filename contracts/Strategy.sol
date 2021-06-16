@@ -42,6 +42,8 @@ contract UnboundStrategy {
 
     Tick[] public ticks;
 
+    address public factory;
+
     constructor(
         address _aggregator,
         address _pool,
@@ -84,6 +86,15 @@ contract UnboundStrategy {
             tick.tickUpper = _ticks[i].tickUpper;
             ticks.push(tick);
         }
+
+        // // check that ticks do not match
+        // for (uint256 i = 0; i < ticks.length; i++) {
+        //     int24 tickLower = ticks[i].tickLower;
+
+        //     for (uint256 i = 0; i < ticks.length; i++) {
+        //         int24 repeated
+        //     }
+        // }
     }
 
     /**
@@ -106,9 +117,7 @@ contract UnboundStrategy {
      * @notice Changes ticks and rebalances
      * @param _ticks New ticks in the array
      */
-    function changeTicksAndRebalance(Tick[] memory _ticks)
-        external
-    {
+    function changeTicksAndRebalance(Tick[] memory _ticks) external {
         // TODO: Make sure we check the maximum added amounts from aggregator, only allow to add amounts the strtategy is holding in aggregator
         require(ticks.length <= 5, "invalid number of ticks");
         changeTicks(_ticks);

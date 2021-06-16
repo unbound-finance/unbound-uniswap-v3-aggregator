@@ -90,7 +90,6 @@ contract V3Aggregator is
 
         // require(strategy.initialized(), "not initilized");
 
-
         uint128 liquidityBefore =
             LiquidityHelper.getCurrentLiquidity(address(pool), _strategy);
 
@@ -147,6 +146,9 @@ contract V3Aggregator is
         );
         Strategy storage oldStrategy = strategies[_strategy];
 
+        uint256 collect0;
+        uint256 collect1;
+
         for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
             IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
 
@@ -162,12 +164,11 @@ contract V3Aggregator is
                 amount1
             );
 
-            // store amounts in outside for loop
-            amount0 = amount0.add(amount0);
-            amount1 = amount1.add(amount1);
-
             // decrease used amounts for each tick
             decreaseUsedAmounts(_strategy, i, amount0, amount1);
+
+            collect0 = collect0.add(amount0);
+            collect1 = collect1.add(amount1);
         }
 
         uint256 unusedAmount0;
@@ -175,6 +176,10 @@ contract V3Aggregator is
 
         // get unused amounts of the strategy
         (unusedAmount0, unusedAmount1) = getUnusedAmounts(_strategy);
+
+        console.log("unused amounts");
+        console.log(unusedAmount0);
+        console.log(unusedAmount1);
 
         if (unusedAmount0 > 1000) {
             unusedAmount0 = unusedAmount0.mul(_shares).div(
@@ -190,8 +195,8 @@ contract V3Aggregator is
 
         decreaseUnusedAmounts(_strategy, unusedAmount0, unusedAmount1);
 
-        amount0 = amount0.add(unusedAmount0);
-        amount1 = amount1.add(unusedAmount1);
+        amount0 = collect0.add(unusedAmount0);
+        amount1 = collect1.add(unusedAmount1);
 
         require(
             _amount0Min <= amount0 && _amount1Min <= amount1,
@@ -241,7 +246,7 @@ contract V3Aggregator is
             // store the values contract is holding
             increaseUnusedAmounts(_strategy, amount0, amount1);
             // update amounts in the strategy
-            updateStrategy(_strategy);
+            updateStrategy(_strategy, false, 0, 0, 0);
         } else if (oldStrategy.hold) {
             // if hold has been enabled in previous update, deploy the hold
             // amount in the current ranges
@@ -254,13 +259,18 @@ contract V3Aggregator is
                 getUnusedAmounts(_strategy);
 
             // remove all the liquidity
-            (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
+            (uint256 collect0, uint256 collect1, ) =
+                burnAllLiquidity(_strategy);
+
+            console.log("liquidity burned");
+            console.log(collect0);
+            console.log(collect1);
 
             // redploy the liquidity
-            (newAmount0, newAmount1) = redeploy(
+            redeploy(
                 _strategy,
-                amount0 + unusedAmount0,
-                amount1 + unusedAmount1
+                collect0 + unusedAmount0,
+                collect1 + unusedAmount1
             );
         }
     }
@@ -332,9 +342,6 @@ contract V3Aggregator is
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage newStrategy = strategies[_strategy];
 
-        uint256 secondaryAmount0;
-        uint256 secondaryAmount1;
-
         if (strategy.swapAmount() > 0) {
             (amount0, amount1) = swapAndRedeploy(_strategy);
 
@@ -345,6 +352,9 @@ contract V3Aggregator is
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
         } else {
+            uint256 totalAmount0;
+            uint256 totalAmount1;
+
             for (uint256 i = 0; i < strategy.tickLength(); i++) {
                 IUnboundStrategy.Tick memory tick = strategy.ticks(i);
 
@@ -358,33 +368,50 @@ contract V3Aggregator is
                     address(this)
                 );
 
-                updateUsedAmounts(
-                    _strategy,
-                    i,
-                    amount0,
-                    amount1
-                );
+                updateUsedAmounts(_strategy, i, amount0, amount1);
 
-                amount0 = amount0.add(amount0);
-                amount1 = amount1.add(amount1);
+                console.log("deployed");
+                console.log(amount0);
+                console.log(amount1);
+
+                totalAmount0 = totalAmount0.add(amount0);
+                totalAmount1 = totalAmount1.add(amount1);
             }
 
+            console.log("total deployed");
+            console.log(totalAmount0);
+            console.log(totalAmount1);
+
             // to calculate unused amount substract the deployed amounts from original amounts
-            amount0 = _amount0 - amount0;
-            amount1 = _amount1 - amount1;
+            amount0 = _amount0 - totalAmount0;
+            amount1 = _amount1 - totalAmount1;
+
+            console.log("unused amounts");
+            console.log(amount0);
+            console.log(amount1);
 
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
         }
 
-        // emit event
-        emit Rebalance(
-            _strategy,
-            msg.sender,
-            amount0,
-            amount1,
-            strategy.tickLower(),
-            strategy.tickUpper()
-        );
+        // // emit event
+        // emit Rebalance(
+        //     _strategy,
+        //     msg.sender,
+        //     amount0,
+        //     amount1,
+        //     strategy.tickLower(),
+        //     strategy.tickUpper()
+        // );
+    }
+
+    function getTicks(address _strategy)
+        public
+        view
+        returns (IUnboundStrategy.Tick[] memory)
+    {
+        Strategy storage strategy = strategies[_strategy];
+
+        return strategy.ticks;
     }
 }
