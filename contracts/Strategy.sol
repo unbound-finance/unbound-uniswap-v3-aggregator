@@ -87,6 +87,7 @@ contract UnboundStrategy {
             ticks.push(tick);
         }
 
+
         // // check that ticks do not match
         // for (uint256 i = 0; i < ticks.length; i++) {
         //     int24 tickLower = ticks[i].tickLower;
@@ -122,6 +123,7 @@ contract UnboundStrategy {
         require(ticks.length <= 5, "invalid number of ticks");
         changeTicks(_ticks);
         IAggregator(aggregator).rebalance(address(this));
+        // TODO: set swap amount to zero
     }
 
     /**

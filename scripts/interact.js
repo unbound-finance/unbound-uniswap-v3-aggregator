@@ -14,13 +14,13 @@ let token1;
 
 async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
-  const _strategy = "0x264A140E9B19c1174aaA77C923b2Cb0Ac90B736a";
-  const _aggregator = "0xF321056d79b919eE1aA6084495C5A37a29aad06B";
+  const _strategy = "0x7034CFc4160b39531dBd1612C2f2Ce093fc9d73e";
+  const _aggregator = "0xf9aB4e105d686cCce4bC97BcCE782b52Babce3c2";
   const _pool = "0x5A12f0272d2D5f44778e2fcB14Dc0439D4B7b688";
   const _token0 = "0xBf20a11bD3d13D643954a907d03512AC6E8893Ac";
   const _token1 = "0x760A5D9072FFf27F488a6785F23a6ad2abB3525a";
 
-  strategy = await ethers.getContractAt("TestStrategy", _strategy);
+  strategy = await ethers.getContractAt("UnboundStrategy", _strategy);
   aggregator = await ethers.getContractAt("V3Aggregator", _aggregator);
   pool = await ethers.getContractAt("UniswapV3Pool", _pool);
 
@@ -34,9 +34,6 @@ async function main() {
   const amountA = "3500000000000000000000";
   const amountB = "1000000000000000000";
 
-  const tickLower = await strategy.tickLower();
-  const tickUpper = await strategy.tickUpper();
-
   const newTickLower = calculateTick(0.0003333333333333333, 60);
   const newTickUpper = calculateTick(0.00025, 60);
 
@@ -46,11 +43,11 @@ async function main() {
   const shares = await aggregator.shares(_strategy, owner);
   console.log(token0Real);
 
-  console.log("token0", await pool.token0())
+  console.log("token0", await pool.token0());
 
   console.log({ shares, unused: unused, getStrategy: getStrategy });
-  
-  await addLiquidity(_strategy);
+  await changeTicksAndRebalance(_strategy);
+  // await addLiquidity(_strategy);
   // await removeLiquidity(_strategy);
   // const shares = await aggregator.shares(_strategy, owner);
   // const unused = await aggregator.unused(_strategy);
@@ -97,11 +94,6 @@ async function main() {
   //   tickUpper = calculateTick(3000, 60);
   //   tickLower = calculateTick(4000, 60);;
 
-  console.log({
-    tickLower,
-    tickUpper,
-  });
-
   // const tx = await aggregator.addLiquidity(
   //   strategy,
   //   "3500000000000000000000",
@@ -129,6 +121,17 @@ async function main() {
   console.log("🎉  Interaction Complete");
 }
 
+async function changeTicksAndRebalance(_strategy) {
+  const tx = await strategy.changeTicksAndRebalance(
+    [["100000000000000000000", "1000000000000000000", "80039", "82920"]],
+    {
+      gasLimit: 10000000,
+    }
+  );
+
+  console.log(tx);
+}
+
 async function addLiquidity(_strategy) {
   const tx = await aggregator.addLiquidity(
     _strategy,
@@ -148,7 +151,7 @@ async function removeLiquidity(_strategy) {
     _strategy,
     "875000000000000000000",
     "0",
-    "0",
+    "0"
   );
   console.log(tx);
 }

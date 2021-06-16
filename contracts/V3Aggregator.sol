@@ -74,6 +74,7 @@ contract V3Aggregator is
         uint256 _amount1,
         uint256 _amount0Min,
         uint256 _amount1Min
+        // uint256 _minShare
     )
         external
         returns (
@@ -114,6 +115,10 @@ contract V3Aggregator is
             liquidityAfter,
             msg.sender
         );
+        
+        // prevent front running of strategy fee
+        // require(share >= minShare, "minimum share check failed");
+
         // price slippage check
         require(
             amount0 >= _amount0Min && amount1 >= _amount1Min,
