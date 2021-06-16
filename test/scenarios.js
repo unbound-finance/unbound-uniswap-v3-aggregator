@@ -66,7 +66,7 @@ beforeEach(async function () {
     "Test Token 0",
     "TST0",
     18,
-    "100000000000000000000000000000",
+    "100000000000000000000000000000000",
     owner.address
   );
 
@@ -74,21 +74,21 @@ beforeEach(async function () {
     "Test Token 1",
     "TST1",
     18,
-    "100000000000000000000000000000",
+    "100000000000000000000000000000000",
     owner.address
   );
 
   // trasfer tokens to userA
-  testToken0.transfer(userA.address, "3333333333000000000000000000");
-  testToken1.transfer(userA.address, "3333333333000000000000000000");
+  testToken0.transfer(userA.address, "333333333333000000000000000000");
+  testToken1.transfer(userA.address, "333333333333000000000000000000");
 
   // transfer tokens to userB
-  testToken0.transfer(userB.address, "3333333333000000000000000000");
-  testToken1.transfer(userB.address, "3333333333000000000000000000");
+  testToken0.transfer(userB.address, "333333333333000000000000000000");
+  testToken1.transfer(userB.address, "333333333333000000000000000000");
 
   // transfer tokens to userC
-  testToken0.transfer(userC.address, "3333333333000000000000000000");
-  testToken1.transfer(userC.address, "3333333333000000000000000000");
+  testToken0.transfer(userC.address, "333333333333000000000000000000");
+  testToken1.transfer(userC.address, "333333333333000000000000000000");
 
   await factory.createPool(testToken0.address, testToken1.address, "3000");
 
@@ -317,6 +317,231 @@ describe("Base Functionality", function () {
     // });
   });
 });
+
+describe("Scenarios", () =>{
+  it("issued shares match liquidity", async () => {
+
+    const amount0 = "5000000000000000000";
+    const amount1 = "60000000000000000000000";
+
+    const initBal0 = await token0.balanceOf(userA.address);
+    const initBal1 = await token1.balanceOf(userA.address);
+
+    await token0
+      .connect(userA)
+      .approve(aggregator.address, amount0);
+    await token1
+      .connect(userA)
+      .approve(aggregator.address, amount1);
+
+    // calculate new ticks
+    const newTickLower = calculateTick(2100, 60);
+    const newTickUpper = calculateTick(3200, 60);
+
+    // launch new strategy
+    const newStrategy = await TestStrategy.deploy(
+      newTickLower,
+      newTickUpper,
+      0,
+      0,
+      pool.address,
+      0,
+      owner.address,
+      aggregator.address
+    );
+
+    await aggregator
+      .connect(userA)
+      .addLiquidity(
+        newStrategy.address,
+        amount0,
+        amount1,
+        "0",
+        "0"
+      );
+
+    let sharesOfUser;
+    let totalAmount0;
+    let totalAmount1;
+
+    const strategyData = await aggregator.strategies(newStrategy.address);
+    sharesOfUser = await aggregator.shares(newStrategy.address, userA.address);
+
+    const bal0After = await token0.balanceOf(userA.address);
+    const bal1After = await token1.balanceOf(userA.address);
+    
+    // amounts entered are not the same as amounts deposited
+    // expect(initBal0.sub(bal0After).toString()).to.equal(amount0.toString());
+    // expect(initBal1.sub(bal1After).toString()).to.equal(amount1.toString());
+
+    const amount0Sent = initBal0.sub(bal0After);
+    const amount1Sent = initBal1.sub(bal1After);
+
+    const totalShares = await aggregator.totalShares(newStrategy.address);
+
+    expect(sharesOfUser.toString()).to.equal(totalShares.toString());
+
+    const amount0Primary = amount0Sent.mul(sharesOfUser).div(totalShares);
+    const amount1Primary = amount1Sent.mul(sharesOfUser).div(totalShares);
+
+    expect(amount0Primary.toString()).to.equal(amount0Sent.toString());
+    expect(amount1Primary.toString()).to.equal(amount1Sent.toString());
+
+    await aggregator.connect(userA).removeLiquidity(newStrategy.address, sharesOfUser.toString(), 0, 0);
+
+    const amount0Final = await token0.balanceOf(userA.address);
+    const amount1Final = await token1.balanceOf(userA.address);
+
+    expect(amount0Final.toString()).to.equal(initBal0.toString());
+    expect(amount1Final.toString()).to.equal(initBal1.toString());
+
+    // values after adding the liquidity
+    console.log({
+      "shares beforee remove 1st liquidity": sharesOfUser.toString(),
+      totalAmount0: strategyData.amount0.toString(),
+      totalAmount1: strategyData.amount1.toString(),
+    });
+  })
+
+  it("issued shares match liquidity - multi-user", async () => {
+
+    const amount0 = "5000000000000000000";
+    const amount1 = "60000000000000000000000";
+
+    const initBal0 = await token0.balanceOf(userA.address);
+    const initBal1 = await token1.balanceOf(userA.address);
+
+    const initBal0B = await token0.balanceOf(userB.address);
+    const initBal1B = await token1.balanceOf(userB.address);
+
+    await token0
+      .connect(userA)
+      .approve(aggregator.address, amount0);
+    await token1
+      .connect(userA)
+      .approve(aggregator.address, amount1);
+
+    await token0
+      .connect(userB)
+      .approve(aggregator.address, amount0);
+    await token1
+      .connect(userB)
+      .approve(aggregator.address, amount1);
+
+      await token0
+      .connect(userC)
+      .approve(aggregator.address, amount0);
+    await token1
+      .connect(userC)
+      .approve(aggregator.address, amount1);
+
+    // calculate new ticks
+    const newTickLower = calculateTick(2100, 60);
+    const newTickUpper = calculateTick(3200, 60);
+
+    // launch new strategy
+    const newStrategy = await TestStrategy.deploy(
+      newTickLower,
+      newTickUpper,
+      0,
+      0,
+      pool.address,
+      0,
+      owner.address,
+      aggregator.address
+    );
+
+    
+
+    await aggregator
+      .connect(userA)
+      .addLiquidity(
+        newStrategy.address,
+        amount0,
+        amount1,
+        "0",
+        "0"
+      );
+    console.log(1)
+    const totalSharesFirst = await aggregator.totalShares(newStrategy.address);
+
+    await aggregator
+      .connect(userB)
+      .addLiquidity(
+        newStrategy.address,
+        amount0,
+        amount1,
+        "0",
+        "0"
+      );
+
+    
+
+    const totalSharesSecond = await aggregator.totalShares(newStrategy.address);
+
+    const strategyData = await aggregator.strategies(newStrategy.address);
+    const sharesUserA = await aggregator.shares(newStrategy.address, userA.address);
+    const sharesUserB = await aggregator.shares(newStrategy.address, userA.address);
+
+    expect(totalSharesSecond.toString()).to.equal(sharesUserA.add(sharesUserB).toString());
+
+
+
+    const Abal0After = await token0.balanceOf(userA.address);
+    const Abal1After = await token1.balanceOf(userA.address);
+
+    const Bbal0After = await token0.balanceOf(userA.address);
+    const Bbal1After = await token1.balanceOf(userA.address);
+    
+    // amounts entered are not the same as amounts deposited
+    // expect(initBal0.sub(bal0After).toString()).to.equal(amount0.toString());
+    // expect(initBal1.sub(bal1After).toString()).to.equal(amount1.toString());
+
+    const amount0SentA = initBal0.sub(Abal0After);
+    const amount1SentA = initBal1.sub(Abal1After);
+
+    const amount0SentB = initBal0.sub(Bbal0After);
+    const amount1SentB = initBal1.sub(Bbal1After);
+
+
+    
+
+    const amount0PrimaryA = amount0SentA.add(amount0SentB).mul(sharesUserA).div(totalSharesSecond);
+    const amount1PrimaryA = amount1SentA.add(amount1SentB).mul(sharesUserA).div(totalSharesSecond);
+
+    const amount0PrimaryB = amount0SentB.add(amount0SentA).mul(sharesUserB).div(totalSharesSecond);
+    const amount1PrimaryB = amount1SentB.add(amount1SentA).mul(sharesUserB).div(totalSharesSecond);
+    
+    // Breakage here //
+    expect(amount0PrimaryA.toString()).to.equal(amount0SentA.toString());
+    expect(amount1PrimaryA.toString()).to.equal(amount1SentA.toString());
+
+    expect(amount0PrimaryB.toString()).to.equal(amount0SentB.toString());
+    expect(amount1PrimaryB.toString()).to.equal(amount1SentB.toString());
+
+
+    await aggregator.connect(userA).removeLiquidity(newStrategy.address, sharesUserA.toString(), 0, 0);
+
+    const sharesAAfter = await aggregator.shares(newStrategy.address, userA.address);
+    const sharesBMid = await aggregator.shares(newStrategy.address, userB.address);
+
+    const amount0FinalA = await token0.balanceOf(userA.address);
+    const amount1FinalA = await token1.balanceOf(userA.address);
+    
+    await aggregator.connect(userB).removeLiquidity(newStrategy.address, sharesUserB.toString(), 0, 0);
+
+    const amount0FinalB = await token0.balanceOf(userB.address);
+    const amount1FinalB = await token1.balanceOf(userB.address);
+
+    expect(amount0FinalA.toString()).to.equal(initBal0.toString());
+    expect(amount1FinalA.toString()).to.equal(initBal1.toString());
+
+    expect(amount0FinalB.toString()).to.equal(initBal0B.toString());
+    expect(amount1FinalB.toString()).to.equal(initBal1B.toString());
+
+    
+  })
+})
 
 // it("Swap and Burn", async function () {
 //   const poolBal0 = await token0.balanceOf(pool.address);

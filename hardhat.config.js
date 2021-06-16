@@ -22,11 +22,11 @@ module.exports = {
     hardhat: {
       allowUnlimitedContractSize: true,
     },
-    kovan: {
-      url: `https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
-      accounts: [process.env.PRIVATE_KEY],
-      gasPrice: 50000000000,
-    }
+    // kovan: {
+    //   url: `https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
+    //   accounts: [process.env.PRIVATE_KEY],
+    //   gasPrice: 50000000000,
+    // }
   },
   solidity: {
     version: '0.7.6',

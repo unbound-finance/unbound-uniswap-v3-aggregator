@@ -83,7 +83,7 @@ contract TestStrategy {
         allowedPriceSlippage = 0;
         IAggregator(aggregator).rebalance(address(this));
     }
-
+    
     function holdFunds() public {
         tickLower = 0;
         tickUpper = 0;
