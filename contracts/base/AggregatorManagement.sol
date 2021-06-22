@@ -9,8 +9,6 @@ import "./AggregatorBase.sol";
 
 import "../interfaces/IUnboundStrategy.sol";
 
-import "hardhat/console.sol";
-
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
@@ -99,8 +97,8 @@ contract AggregatorManagement is AggregatorBase {
     }
 
     /**
-        @dev Gets unused (remaining) amounts
-        @param _strategy Address of the strategy
+     * @dev Gets unused (remaining) amounts
+     * @param _strategy Address of the strategy
      */
     function getUnusedAmounts(address _strategy)
         internal
@@ -159,11 +157,11 @@ contract AggregatorManagement is AggregatorBase {
         }
 
         // strategy owner fees
-        if (strategy.fee() > 0) {
-            uint256 managerShare = share.mul(strategy.fee()).div(1e6);
-            mintShare(_strategy, managerShare, strategy.feeTo());
-            share = share.sub(managerShare);
-        }
+        // if (strategy.fee() > 0) {
+        //     uint256 managerShare = share.mul(strategy.fee()).div(1e6);
+        //     mintShare(_strategy, managerShare, strategy.feeTo());
+        //     share = share.sub(managerShare);
+        // }
 
         if (feeTo != address(0)) {
             uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
@@ -206,56 +204,72 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount1
     ) internal {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        Strategy storage localStrategyData = strategies[_strategy];
+        localStrategyData.hold = strategy.hold();
+
+        if (localStrategyData.ticks.length > 0) {
+            IUnboundStrategy.Tick memory oldTick =
+                localStrategyData.ticks[_tickId];
+            delete localStrategyData.ticks;
+            for (uint256 i = 0; i < strategy.tickLength(); i++) {
+                IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+
+                IUnboundStrategy.Tick memory newTick;
+                newTick.tickLower = tick.tickLower;
+                newTick.tickUpper = tick.tickUpper;
+                // if the provided tick id matches with index
+                // update the amounts directly else continue with old amounts
+                if (i == _tickId) {
+                    newTick.amount0 = _amount0;
+                    newTick.amount1 = _amount1;
+                } else {
+                    newTick.amount0 = oldTick.amount0;
+                    newTick.amount1 = oldTick.amount1;
+                }
+
+                localStrategyData.ticks.push(newTick);
+            }
+        } else {
+
+            for (uint256 i = 0; i < strategy.tickLength(); i++) {
+                IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+
+                IUnboundStrategy.Tick memory newTick;
+                newTick.tickLower = tick.tickLower;
+                newTick.tickUpper = tick.tickUpper;
+                // if the provided tick id matches with index
+                // update the amounts directly else continue with old amounts
+                if (i == _tickId) {
+                    newTick.amount0 = _amount0;
+                    newTick.amount1 = _amount1;
+                }
+
+                localStrategyData.ticks.push(newTick);
+            }
+        }
+    }
+
+    function adjustArray(address _strategy) internal {
         Strategy storage newStrategy = strategies[_strategy];
-        newStrategy.hold = strategy.hold();
-        // update the ticks
-        updateTicks(_specificUpdate, _strategy, _tickId, _amount0, _amount1);
-    }
-
-    function updateUsedAmounts(
-        address _strategy,
-        uint256 _tickId,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal {
-        Strategy storage strategy = strategies[_strategy];
-
-        // store old amounts in memory to use later
-        IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
-
-        // update ticks
-        updateTicks(true, _strategy, _tickId, _amount0, _amount1);
-    }
-
-    function updateTicks(
-        bool specificUpdate,
-        address _strategy,
-        uint256 _tickId,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal {
-        Strategy storage localStrategy = strategies[_strategy];
-
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
 
-        delete localStrategy.ticks;
-        for (uint256 i = 0; i < strategy.tickLength(); i++) {
-            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+        // get the number of indexes to delete
+        uint256 arrayLength;
+        if (strategy.tickLength() > newStrategy.ticks.length) {
+            arrayLength = strategy.tickLength().sub(newStrategy.ticks.length);
+        } else if (strategy.tickLength() < newStrategy.ticks.length) {
+            arrayLength = newStrategy.ticks.length.sub(strategy.tickLength());
+        }
 
-            IUnboundStrategy.Tick memory newTick;
-            newTick.tickLower = tick.tickLower;
-            newTick.tickUpper = tick.tickUpper;
-            // if the provided tick id matches with index
-            // update the amounts directly else continue with old amounts
-            if (i == _tickId && specificUpdate) {
-                newTick.amount0 = _amount0;
-                newTick.amount1 = _amount1;
-            } else {
-                newTick.amount0 = tick.amount0;
-                newTick.amount1 = tick.amount1;
+        // delete the indexes required
+        if (strategy.tickLength() != newStrategy.ticks.length) {
+            for (uint256 i = 0; i < arrayLength; i++) {
+                // adjust the indexes
+                for (uint256 j = i; j < newStrategy.ticks.length - 1; j++) {
+                    newStrategy.ticks[j] = newStrategy.ticks[j + 1];
+                }
+                newStrategy.ticks.pop();
             }
-
-            localStrategy.ticks.push(newTick);
         }
     }
 
@@ -272,21 +286,104 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount0,
         uint256 _amount1
     ) internal {
-        Strategy storage strategy = strategies[_strategy];
-
-        if (strategy.ticks.length == 0) {
-            // update ticks
-            updateStrategy(_strategy, true, _tickId, _amount0, _amount1);
+        Strategy storage localStrategyData = strategies[_strategy];
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        
+        if (localStrategyData.ticks.length == 0) {
+            updateUsedAmounts(_strategy, _tickId, _amount0, _amount1);
         } else {
-            // store old amounts in memory to use later
-            IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
-            updateStrategy(
+            updateUsedAmounts(
                 _strategy,
-                true,
                 _tickId,
-                tick.amount0.add(_amount0),
-                tick.amount1.add(_amount1)
+                localStrategyData.ticks[_tickId].amount0.add(_amount0),
+                localStrategyData.ticks[_tickId].amount1.add(_amount1)
             );
+        }
+    }
+
+    function updateUsedAmounts(
+        address _strategy,
+        uint256 _tickId,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal {
+        Strategy storage localStrategyData = strategies[_strategy];
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+
+        uint256 oldLength = localStrategyData.ticks.length;
+
+        if (localStrategyData.ticks.length == 0) {
+            // initiate an ticks array and push new tick data to it
+            IUnboundStrategy.Tick memory newTick;
+            newTick.tickLower = strategy.ticks(_tickId).tickLower;
+            newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
+            newTick.amount0 = _amount0;
+            newTick.amount1 = _amount1;
+            localStrategyData.ticks.push(newTick);
+        } else {
+            // updated specific tick data
+            IUnboundStrategy.Tick storage newTick =
+                localStrategyData.ticks[_tickId];
+            newTick.tickLower = strategy.ticks(_tickId).tickLower;
+            newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
+            newTick.amount0 = _amount0;
+            newTick.amount1 = _amount1;
+        }
+
+        // // first delete that variable push it and rewrite
+        // if (localStrategyData.ticks.length == 0) {
+        //     IUnboundStrategy.Tick memory newTick;
+        //     newTick.tickLower = strategy.ticks(_tickId).tickLower;
+        //     newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
+        //     newTick.amount0 = _amount0;
+        //     newTick.amount1 = _amount1;
+        //     localStrategyData.ticks.push(newTick);
+        // } else {
+        //     IUnboundStrategy.Tick memory newTick =
+        //         localStrategyData.ticks[_tickId];
+        //     newTick.tickLower = strategy.ticks(_tickId).tickLower;
+        //     newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
+        //     newTick.amount0 = _amount0;
+        //     newTick.amount1 = _amount1;
+        //     localStrategyData.ticks.push(newTick);
+
+        //     uint256 newLength = localStrategyData.ticks.length;
+
+        //     uint256 arrayLength;
+        //     if (newLength > oldLength) {
+        //         arrayLength = newLength.sub(oldLength);
+        //     } else if (newLength > oldLength) {
+        //         arrayLength = oldLength.sub(newLength);
+        //     }
+
+        //     if (localStrategyData.ticks.length > 1) {
+        //         if (oldLength != newLength) {
+        //             for (uint256 i = 0; i < arrayLength; i++) {
+        //                 for (
+        //                     uint256 j = i;
+        //                     j < localStrategyData.ticks.length - 1;
+        //                     j++
+        //                 ) {
+        //                     localStrategyData.ticks[j] = localStrategyData
+        //                         .ticks[j + 1];
+        //                 }
+        //                 localStrategyData.ticks.pop();
+        //                 reverse(localStrategyData.ticks);
+        //             }
+        //         }
+        //     }
+        // }
+    }
+
+    function reverse(IUnboundStrategy.Tick[] storage ticks)
+        internal
+        returns (bool)
+    {
+        address t;
+        for (uint256 i = 0; i < ticks.length / 2; i++) {
+            IUnboundStrategy.Tick storage t = ticks[i];
+            ticks[i] = ticks[ticks.length - i - 1];
+            ticks[ticks.length - i - 1] = t;
         }
     }
 
@@ -303,16 +400,18 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount0,
         uint256 _amount1
     ) internal {
-        Strategy storage strategy = strategies[_strategy];
-        IUnboundStrategy.Tick memory tick = strategy.ticks[_tickId];
+        Strategy storage localStrategyData = strategies[_strategy];
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
 
-        // store old amounts in memory to use later
-        updateStrategy(
-            _strategy,
-            true,
-            _tickId,
-            tick.amount0.sub(_amount0),
-            tick.amount1.sub(_amount1)
-        );
+        if (localStrategyData.ticks.length == 0) {
+            updateUsedAmounts(_strategy, _tickId, _amount0, _amount1);
+        } else {
+            updateUsedAmounts(
+                _strategy,
+                _tickId,
+                localStrategyData.ticks[_tickId].amount0.sub(_amount0),
+                localStrategyData.ticks[_tickId].amount1.sub(_amount1)
+            );
+        }
     }
 }

@@ -21,8 +21,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/SafeCast.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "hardhat/console.sol";
-
 // TODO: Add Reentrancy guard
 // TODO: Add Pausable functionality
 
@@ -73,17 +71,19 @@ contract V3Aggregator is
         uint256 _amount0,
         uint256 _amount1,
         uint256 _amount0Min,
-        uint256 _amount1Min
-        // uint256 _minShare
+        uint256 _amount1Min,
+        uint256 _minShare
     )
         external
         returns (
+            // uint256 _minShare
             uint256 share,
             uint256 amount0,
             uint256 amount1
         )
     {
         // TODO: If liquidity is on hold don't pass, keep it in unused
+        // TODO: Figure out how to make use of fees while issuing shares
 
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
@@ -91,6 +91,10 @@ contract V3Aggregator is
 
         // require(strategy.initialized(), "not initilized");
 
+        // get total number of assets under management
+        // (amount0, amount1) = getAUM(_strategy);
+
+        // get liquidity before adding the new liqudiity
         uint128 liquidityBefore =
             LiquidityHelper.getCurrentLiquidity(address(pool), _strategy);
 
@@ -104,9 +108,11 @@ contract V3Aggregator is
             msg.sender
         );
 
+        // get liquidity value after adding liquidity of the user
         uint128 liquidityAfter =
             LiquidityHelper.getCurrentLiquidity(address(pool), _strategy);
 
+        // issue share based on the liquidity added
         share = issueShare(
             _strategy,
             amount0,
@@ -115,9 +121,9 @@ contract V3Aggregator is
             liquidityAfter,
             msg.sender
         );
-        
+
         // prevent front running of strategy fee
-        // require(share >= minShare, "minimum share check failed");
+        require(share >= _minShare, "minimum share check failed");
 
         // price slippage check
         require(
@@ -181,10 +187,6 @@ contract V3Aggregator is
 
         // get unused amounts of the strategy
         (unusedAmount0, unusedAmount1) = getUnusedAmounts(_strategy);
-
-        console.log("unused amounts");
-        console.log(unusedAmount0);
-        console.log(unusedAmount1);
 
         if (unusedAmount0 > 1000) {
             unusedAmount0 = unusedAmount0.mul(_shares).div(
@@ -267,10 +269,6 @@ contract V3Aggregator is
             (uint256 collect0, uint256 collect1, ) =
                 burnAllLiquidity(_strategy);
 
-            console.log("liquidity burned");
-            console.log(collect0);
-            console.log(collect1);
-
             // redploy the liquidity
             redeploy(
                 _strategy,
@@ -282,36 +280,41 @@ contract V3Aggregator is
 
     function swapAndRedeploy(address _strategy)
         internal
-        returns (uint256 amount0, uint256 amount1)
+        returns (
+            uint256 amount0,
+            uint256 amount1,
+            uint256 amountOut
+        )
     {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage newStrategy = strategies[_strategy];
 
-        // don't let strategy owner swap more than they manage
-        // TODO: Add a check to check total amounts managed by the liquidity
-        // if (strategy.zeroToOne()) {
-        //     require(
-        //         uint256(strategy.swapAmount()) <=
-        //             newStrategy.amount0.add(newStrategy.secondaryAmount0)
-        //     );
-        // } else {
-        //     require(
-        //         uint256(strategy.swapAmount()) <=
-        //             newStrategy.amount1.add(newStrategy.secondaryAmount1)
-        //     );
-        // }
+        // get total assets under management of the strategy
+        (uint256 totalAmount0, uint256 totalAmount1) = getAUM(_strategy);
 
-        uint256 amountOut;
+        // check that swap amount should not exceed amounts managed
+        // TODO: Rethink about this check
+        if (strategy.zeroToOne()) {
+            require(strategy.swapAmount() <= totalAmount0);
+        } else {
+            require(strategy.swapAmount() <= totalAmount1);
+        }
 
         // swap tokens
         (amountOut) = swap(
             address(pool),
             _strategy,
             strategy.zeroToOne(),
-            strategy.swapAmount(),
+            int256(strategy.swapAmount()),
             strategy.allowedSlippage()
         );
+
+        uint256 deployedAmount0;
+        uint256 deployedAmount1;
+
+        // delete old tick data
+        delete newStrategy.ticks;
 
         for (uint256 i = 0; i < strategy.tickLength(); i++) {
             IUnboundStrategy.Tick memory tick = strategy.ticks(i);
@@ -326,11 +329,31 @@ contract V3Aggregator is
                 address(this)
             );
 
-            updateUsedAmounts(_strategy, i, amount0, amount1);
+            // push new tick to the ticks array
+            IUnboundStrategy.Tick memory newTick;
+            newTick.tickLower = tick.tickLower;
+            newTick.tickUpper = tick.tickUpper;
+            newTick.amount0 = amount0;
+            newTick.amount1 = amount1;
+            newStrategy.ticks.push(newTick);
 
-            amount0 = amount0.add(amount0);
-            amount1 = amount1.add(amount1);
+            // add to the amounts outside the loop
+            deployedAmount0 = deployedAmount0.add(amount0);
+            deployedAmount1 = deployedAmount1.add(amount1);
         }
+
+        amount0 = deployedAmount0;
+        amount1 = deployedAmount1;
+
+        // // check if the total amounts are always less than the managed
+        // if(strategy.zeroToOne()) {
+        //     amount0 = deployedAmount0.add(strategy.swapAmount());
+        //     amount1 = deployedAmount1.sub(amountOut);
+        // }
+        // else {
+        //     amount0 = deployedAmount0.sub(amountOut);
+        //     amount1 = deployedAmount1.add(strategy.swapAmount());
+        // }
     }
 
     /**
@@ -347,18 +370,57 @@ contract V3Aggregator is
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage newStrategy = strategies[_strategy];
 
+        console.log("burned amount");
+        console.log(_amount0);
+        console.log(_amount1);
+
         if (strategy.swapAmount() > 0) {
-            (amount0, amount1) = swapAndRedeploy(_strategy);
+            uint256 amountOut;
 
-            // unused amounts
-            amount0 = _amount0 - amount0;
-            amount1 = _amount1 - amount1;
+            (amount0, amount1, amountOut) = swapAndRedeploy(_strategy);
 
+            console.log("total deployed after swap");
+            console.log("amount0", amount0);
+            console.log("amount1", amount1);
+            console.log("swapAmount", strategy.swapAmount());
+            console.log("amountOut", amountOut);
+
+            if (strategy.zeroToOne()) {
+                if (amount0 >= _amount0.sub(strategy.swapAmount())) {
+                    amount0 = 0;
+                } else {
+                    amount0 = _amount0.sub(strategy.swapAmount()).sub(amount0);
+                }
+
+                if (amount1 >= _amount1.add(amountOut)) {
+                    amount1 = 0;
+                } else {
+                    amount1 = _amount1.add(amountOut).sub(amount1);
+                }
+            } else {
+                if (amount1 >= _amount1.sub(strategy.swapAmount())) {
+                    amount1 = 0;
+                } else {
+                    amount1 = _amount1.sub(strategy.swapAmount()).sub(amount1);
+                }
+
+                if (amount0 >= _amount0.add(amountOut)) {
+                    amount0 = 0;
+                } else {
+                    amount0 = _amount1.add(amountOut).sub(amount0);
+                }
+            }
+
+            console.log("unused");
+            console.log(amount0);
+            console.log(amount1);
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
         } else {
             uint256 totalAmount0;
             uint256 totalAmount1;
+
+            delete newStrategy.ticks;
 
             for (uint256 i = 0; i < strategy.tickLength(); i++) {
                 IUnboundStrategy.Tick memory tick = strategy.ticks(i);
@@ -373,27 +435,22 @@ contract V3Aggregator is
                     address(this)
                 );
 
-                updateUsedAmounts(_strategy, i, amount0, amount1);
+                // TODO: Move to different file later
+                IUnboundStrategy.Tick memory newTick;
+                newTick.tickLower = tick.tickLower;
+                newTick.tickUpper = tick.tickUpper;
+                newTick.amount0 = amount0;
+                newTick.amount1 = amount1;
+                newStrategy.ticks.push(newTick);
 
-                console.log("deployed");
-                console.log(amount0);
-                console.log(amount1);
-
+                // update total amounts
                 totalAmount0 = totalAmount0.add(amount0);
                 totalAmount1 = totalAmount1.add(amount1);
             }
 
-            console.log("total deployed");
-            console.log(totalAmount0);
-            console.log(totalAmount1);
-
             // to calculate unused amount substract the deployed amounts from original amounts
-            amount0 = _amount0 - totalAmount0;
-            amount1 = _amount1 - totalAmount1;
-
-            console.log("unused amounts");
-            console.log(amount0);
-            console.log(amount1);
+            amount0 = _amount0.sub(totalAmount0);
+            amount1 = _amount1.sub(totalAmount1);
 
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
@@ -416,7 +473,33 @@ contract V3Aggregator is
         returns (IUnboundStrategy.Tick[] memory)
     {
         Strategy storage strategy = strategies[_strategy];
-
         return strategy.ticks;
+    }
+
+    /**
+     * @notice Gets assets under management for specific strategy
+     * @param _strategy Address of the strategy contract
+     */
+    function getAUM(address _strategy)
+        public
+        view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        Strategy memory strategy = strategies[_strategy];
+        UnusedAmounts memory unusedAmounts = unused[_strategy];
+
+        uint256 totalAmount0;
+        uint256 totalAmount1;
+
+        // add amounts from different ranges
+        for (uint256 i = 0; i < strategy.ticks.length; i++) {
+            IUnboundStrategy.Tick memory tick = strategy.ticks[i];
+            totalAmount0 = totalAmount0.add(tick.amount0);
+            totalAmount1 = totalAmount1.add(tick.amount1);
+        }
+
+        // add unused amounts
+        amount0 = totalAmount0.add(unusedAmounts.amount0);
+        amount1 = totalAmount1.add(unusedAmounts.amount1);
     }
 }

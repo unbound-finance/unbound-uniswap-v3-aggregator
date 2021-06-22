@@ -97,7 +97,7 @@ library LiquidityHelper {
                         tick.tickUpper
                     )
                 );
-            liquidity += currentLiquidity;
+            liquidity = liquidity + currentLiquidity;
         }
     }
 

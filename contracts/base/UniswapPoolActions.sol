@@ -18,6 +18,9 @@ import "../interfaces/IUnboundStrategy.sol";
 
 import "../base/AggregatorManagement.sol";
 
+// TODO:Remove
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 contract UniswapPoolActions is
     AggregatorManagement,
     IUniswapV3MintCallback,
@@ -72,6 +75,7 @@ contract UniswapPoolActions is
                 _amount0,
                 _amount1
             );
+
         // set temparary variable for callback verification
         pool_ = _pool;
         // add liquidity to Uniswap pool
@@ -122,13 +126,6 @@ contract UniswapPoolActions is
         uint256 owed0;
         uint256 owed1;
 
-        console.log("burnLiquidity");
-        console.log(uint24(_tickLower));
-        console.log(uint24(_tickUpper));
-        console.log(_amount0);
-        console.log(_amount1);
-        console.log(liquidity);
-
         // burn liquidity
         if (liquidity > 0) {
             (owed0, owed1) = pool.burn(_tickLower, _tickUpper, liquidity);
@@ -142,13 +139,9 @@ contract UniswapPoolActions is
             address(this),
             _tickLower,
             _tickUpper,
-            uint128(_amount0),
-            uint128(_amount1)
+            uint128(owed0),
+            uint128(owed1)
         );
-
-        console.log("collect amounts in burn");
-        console.log(collect0);
-        console.log(collect1);
 
         emit FeesClaimed(
             _strategy,
@@ -176,25 +169,24 @@ contract UniswapPoolActions is
 
         for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
             IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
-            // Burn liquidity for range order
-            (uint256 amount0, uint256 amount1, uint128 liquidity) =
-                burnLiquidity(
-                    address(pool),
-                    address(strategy),
-                    tick.tickLower,
-                    tick.tickUpper,
-                    tick.amount0,
-                    tick.amount1
-                );
 
-            collect0 = collect0.add(amount0);
-            collect1 = collect1.add(amount1);
-            liquidity += liquidity;
+            if (tick.tickLower != 0 && tick.tickUpper != 0) {
+                // Burn liquidity for range order
+                (uint256 amount0, uint256 amount1, uint128 burnedLiquidity) =
+                    burnLiquidity(
+                        address(pool),
+                        address(strategy),
+                        tick.tickLower,
+                        tick.tickUpper,
+                        tick.amount0,
+                        tick.amount1
+                    );
+
+                collect0 = collect0.add(amount0);
+                collect1 = collect1.add(amount1);
+                liquidity = liquidity + burnedLiquidity;
+            }
         }
-
-        console.log("burn all liquidity");
-        console.log(collect0);
-        console.log(collect1);
     }
 
     // swaps with exact input single functionality
@@ -305,6 +297,10 @@ contract UniswapPoolActions is
         require(msg.sender == pool_);
         IUniswapV3Pool pool = IUniswapV3Pool(pool_);
         delete pool_;
+
+        console.log("mint callback");
+        console.log(amount0);
+        console.log(amount1);
 
         if (decoded.payer == address(this)) {
             // transfer tokens already in the contract

@@ -14,11 +14,20 @@ let token1;
 
 async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
-  const _strategy = "0x7034CFc4160b39531dBd1612C2f2Ce093fc9d73e";
-  const _aggregator = "0xf9aB4e105d686cCce4bC97BcCE782b52Babce3c2";
-  const _pool = "0x5A12f0272d2D5f44778e2fcB14Dc0439D4B7b688";
-  const _token0 = "0xBf20a11bD3d13D643954a907d03512AC6E8893Ac";
-  const _token1 = "0x760A5D9072FFf27F488a6785F23a6ad2abB3525a";
+
+  const config = {
+    dai: "0xB0E810B60813A61e8214E4d688cCB78e495Fc081",
+    eth: "0x6E650Bf5216b8aFC84576061E22F5D7Ed3EA3bFE",
+    pool: "0x23450701eA9F672cd8dF5796AAcD07a9c1d996bb",
+    strategy: "0x6B28d8C72371d17C88709D3d517e5b2803F12C3f",
+    v3Aggregator: "0x87B1EbCE964eAf8D65c51B3d96ff7bD27E5C4D0f",
+  };
+
+  const _strategy = config.strategy;
+  const _aggregator = config.v3Aggregator;
+  const _pool = config.pool;
+  const _token0 = config.dai;
+  const _token1 = config.eth;
 
   strategy = await ethers.getContractAt("UnboundStrategy", _strategy);
   aggregator = await ethers.getContractAt("V3Aggregator", _aggregator);
@@ -37,17 +46,58 @@ async function main() {
   const newTickLower = calculateTick(0.0003333333333333333, 60);
   const newTickUpper = calculateTick(0.00025, 60);
 
-  const getStrategy = await aggregator.strategies(_strategy);
+  const ticks = await aggregator.getTicks(_strategy);
   const unused = await aggregator.unused(_strategy);
   const token0Real = await pool.token0();
   const shares = await aggregator.shares(_strategy, owner);
-  console.log(token0Real);
+  const tvl = await aggregator.getAUM(_strategy);
+  const token0Bal = await token0.balanceOf(owner);
+  const token1Bal = await token1.balanceOf(owner);
 
-  console.log("token0", await pool.token0());
+  // console.log(ticks);
 
-  console.log({ shares, unused: unused, getStrategy: getStrategy });
+  // console.log("token0", await pool.token0());
+
+  // await changeTicksAndRebalance(_strategy);
+
+  console.log({
+    shares,
+    balance: {
+      token0: token0Bal.toString(),
+      token1: token1Bal.toString(),
+    },
+    unused: {
+      amount0: unused.amount0.toString(),
+      amount1: unused.amount1.toString(),
+    },
+    ticks: {
+      amount0: ticks[0].amount0.toString(),
+      amount1: ticks[0].amount1.toString(),
+    },
+    totalLiquidity: {
+      amount0: (
+        parseInt(unused.amount0) + parseInt(ticks[0].amount0)
+      ).toString(),
+      amount1: (
+        parseInt(unused.amount1) + parseInt(ticks[0].amount1)
+      ).toString(),
+    },
+    tvl: {
+      amount0: tvl.amount0.toString(),
+      amount1: tvl.amount1.toString(),
+    },
+  });
+
+  // console.log(tvl);
+
   await changeTicksAndRebalance(_strategy);
-  // await addLiquidity(_strategy);
+  // await changeTicksAndRebalance(_strategy);
+
+  // await changeTicksAndRebalance(_strategy);
+
+  // await changeTicksAndRebalance(_strategy);
+  // await changeTicksAndRebalance(_strategy);
+  // await changeTicksAndRebalance(_strategy);
   // await removeLiquidity(_strategy);
   // const shares = await aggregator.shares(_strategy, owner);
   // const unused = await aggregator.unused(_strategy);
@@ -121,13 +171,66 @@ async function main() {
   console.log("🎉  Interaction Complete");
 }
 
+// async function swapAndRebalance(_strategy) {
+//   const tx = await strategy.swapAndRebalance(
+//     "0",
+//     "100000",
+//     "100000",
+//     true,
+//     [["278162800053839930000", "2370965592054314000000000", "78240", "82920"]]
+//     // {
+//     //   gasLimit: 10000000,
+//     // }
+//   );
+
+//   console.log(tx);
+// }
+
 async function changeTicksAndRebalance(_strategy) {
-  const tx = await strategy.changeTicksAndRebalance(
-    [["100000000000000000000", "1000000000000000000", "80039", "82920"]],
+  // const tickLower = calculateTick(0.00025, 60);
+  // const tickUpper = calculateTick(0.0003333333333333333, 60);
+
+  // console.log({
+  //   tickLower,
+  //   tickUpper,
+  // });
+
+  // [15596.867398363842, 3.7415834221929125, -82920, -80040], [12276.52368152808, 0.591446184039982, -82140, -78240]
+  const tx = await strategy.swapAndRebalance(
+    toGwei(0.4491771272914921),
+    "1000000",
+    "1000000",
+    true,
+    [
+      [toGwei(1), toGwei(100), 80040, 82920],
+      [toGwei(1), toGwei(200), 75960, 82920],
+      [toGwei(2), toGwei(37889.72347739101), 75960, 80040],
+    ],
     {
       gasLimit: 10000000,
     }
   );
+
+  // const tx = await strategy.changeTicksAndRebalance(
+  //   [
+  //     [toGwei(6780.699), toGwei(0.69024), "-81720", "-81300"],
+  //     [toGwei(0), toGwei(1.314),"-82920", "-81720"],
+  //     [toGwei(2299.19), toGwei(0), "-78240", "-75960"],
+  //   ],
+  //   {
+  //     gasLimit: 1000000,
+  //   }
+  // );
+
+  // const tx = await strategy.swapAndRebalance(
+  //   toGwei(1.6485258940457455),
+  //   "100000",
+  //   "100000",
+  //   false,
+  //   [
+  //     [toGwei(11451.834060090392), toGwei(2.052605755715921), -82980, -79380],
+  //   ]
+  // );
 
   console.log(tx);
 }
@@ -135,13 +238,11 @@ async function changeTicksAndRebalance(_strategy) {
 async function addLiquidity(_strategy) {
   const tx = await aggregator.addLiquidity(
     _strategy,
-    "3500000000000000000000",
-    "1000000000000000000",
+    "10000000000000000000000",
+    "35000000000000000000000000",
     "0",
     "0",
-    {
-      gasLimit: 10000000,
-    }
+    "0"
   );
   console.log(tx);
 }
@@ -182,6 +283,9 @@ function calculateTick(price, tickSpacing) {
   return parseInt(logTick) + tickSpacing - (parseInt(logTick) % tickSpacing);
 }
 
+function toGwei(_number) {
+  return (_number * 1e18).toLocaleString("fullwide", { useGrouping: false }); // returns "4000000000000000000000000000"
+}
 // We recommend this pattern to be able to use async/await everywhere
 // and properly handle errors.
 main()

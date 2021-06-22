@@ -75,10 +75,14 @@ async function main() {
   console.log({ sqrtPriceX96 });
   await pool.initialize(sqrtPriceX96);
 
+  console.log("✅ pool initialized")
+
   const governance = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
 
   // deploy aggregator contract
   const v3Aggregator = await V3Aggregator.deploy(governance);
+
+  console.log("✅ aggregator deployed")
 
   // deploy strategy contract
   strategy = await TestStrategy.deploy(
@@ -87,8 +91,12 @@ async function main() {
     governance
   );
 
+  console.log("✅ strategy deployed")
+
   // intialize the strategy
   await strategy.initialize([[0, 0, tickLower, tickUpper]]);
+
+  console.log("✅ strategy initialised")
 
   // console.log contract addresses
   console.log("🎉 Contracts Deployed");

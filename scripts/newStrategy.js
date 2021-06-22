@@ -16,13 +16,21 @@ let tickUpper;
 
 async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
-  const _strategy = "0xB010FA36E4994735f2b8E8c6705f31DD0C7EF0B1";
-  const _aggregator = "0xF321056d79b919eE1aA6084495C5A37a29aad06B";
-  const _pool = "0x5A12f0272d2D5f44778e2fcB14Dc0439D4B7b688";
-  const _token0 = "0xd5B8557F2fb5A589b65F628698Ee346897750264";
-  const _token1 = "0x90897fc7AB659b23881f7E97e54D181229C008E6";
+  const config = {
+    dai: "0xB0E810B60813A61e8214E4d688cCB78e495Fc081",
+    eth: "0x6E650Bf5216b8aFC84576061E22F5D7Ed3EA3bFE",
+    pool: "0x23450701eA9F672cd8dF5796AAcD07a9c1d996bb",
+    strategy: "0x6B28d8C72371d17C88709D3d517e5b2803F12C3f",
+    v3Aggregator: "0x87B1EbCE964eAf8D65c51B3d96ff7bD27E5C4D0f",
+  };
 
-  const TestStrategy = await ethers.getContractFactory("TestStrategy");
+  const _strategy = config.strategy;
+  const _aggregator = config.v3Aggregator;
+  const _pool = config.pool;
+  const _token0 = config.dai;
+  const _token1 = config.eth;
+
+  const TestStrategy = await ethers.getContractFactory("UnboundStrategy");
 
   aggregator = await ethers.getContractAt("V3Aggregator", _aggregator);
   pool = await ethers.getContractAt("UniswapV3Pool", _pool);
@@ -30,40 +38,39 @@ async function main() {
   dai = await ethers.getContractAt("ERC20", _token0);
   eth = await ethers.getContractAt("ERC20", _token1);
 
-  if (dai.address < eth.address) {
+  const balanceOfDai = await dai.balanceOf(owner);
+  const balanceOfEth = await dai.balanceOf(owner);
 
+  await dai.approve(aggregator.address, balanceOfDai);
+  await eth.approve(aggregator.address, balanceOfEth);
+
+  if (dai.address < eth.address) {
     // add initial liquidity to start the pool
     tickUpper = calculateTick(0.0003333333333333333, 60);
     tickLower = calculateTick(0.00025, 60);
   } else {
     // add initial liquidity to start the pool
-    tickLower = calculateTick(3000, 60);
-    tickUpper = calculateTick(4000, 60);
+    tickLower = calculateTick(2500, 60);
+    tickUpper = calculateTick(4500, 60);
   }
 
-  strategy = await TestStrategy.deploy(
-    // deploy strategy contract
-    tickLower,
-    tickUpper,
-    0,
-    0,
-    _pool,
-    "0",
-    owner,
-    aggregator.address
-  );
+  // deploy strategy contract
+  strategy = await TestStrategy.deploy(aggregator.address, pool.address, owner);
+
+  await strategy.initialize([[0, 0, tickLower, tickUpper]]);
 
   await addLiquidity(strategy.address);
 
   console.log("🎉  Interaction Complete");
-  console.log("New Strategy Address", strategy.address)
+  console.log("New Strategy Address", strategy.address);
 }
 
 async function addLiquidity(_strategy) {
   const tx = await aggregator.addLiquidity(
     _strategy,
-    "3500000000000000000000",
-    "10000000000000000000000000000000",
+    "3500000000000000000000000",
+    "1000000000000000000000000000000",
+    "0",
     "0",
     "0",
     {
@@ -107,6 +114,10 @@ function encodePriceSqrt(reserve0, reserve1) {
 function calculateTick(price, tickSpacing) {
   const logTick = 46054 * Math.log10(Math.sqrt(price));
   return parseInt(logTick) + tickSpacing - (parseInt(logTick) % tickSpacing);
+}
+
+function toGwei(_number) {
+  return (_number * 1e18).toLocaleString("fullwide", { useGrouping: false }); // returns "4000000000000000000000000000"
 }
 
 // We recommend this pattern to be able to use async/await everywhere

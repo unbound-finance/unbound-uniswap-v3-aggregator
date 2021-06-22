@@ -9,12 +9,18 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "hardhat/console.sol";
 
 // TODO: Add events on each action
+// TODO: Add address validation checks
+// TODO: Add logic in such a way that both ticks cannot be same
 
 interface IAggregator {
     function rebalance(address _strategy) external;
+
+    function getAUM(address _strategy) external returns (uint256, uint256);
 }
 
 contract UnboundStrategy {
+    using SafeMath for uint256;
+
     address public immutable pool;
 
     uint256 public fee;
@@ -44,6 +50,9 @@ contract UnboundStrategy {
 
     address public factory;
 
+    uint256 totalAmount0;
+    uint256 totalAmount1;
+
     constructor(
         address _aggregator,
         address _pool,
@@ -52,11 +61,12 @@ contract UnboundStrategy {
         aggregator = _aggregator;
         pool = _pool;
         operator = _operator;
+        fee = 0;
     }
 
     // Modifiers
     modifier onlyOperator() {
-        require(isOperator(), "Ownable: caller is not the operator");
+        require(msg.sender == operator, "Ownable: caller is not the operator");
         _;
     }
 
@@ -67,7 +77,7 @@ contract UnboundStrategy {
     }
 
     // Checks if sender is operator
-    function isOperator() public view returns (bool) {
+    function isOperator() internal view returns (bool) {
         return msg.sender == operator;
     }
 
@@ -77,7 +87,12 @@ contract UnboundStrategy {
      */
     function changeTicks(Tick[] memory _ticks) internal {
         delete ticks;
+
         // TODO: Add a check that two tick upper and tick lowers are not  in array cannot be same
+
+        // (uint256 allowedAmount0, uint256 allowedAmount1) =
+        //     IAggregator(aggregator).getAUM(address(this));
+
         for (uint256 i = 0; i < _ticks.length; i++) {
             Tick storage tick;
             tick.amount0 = _ticks[i].amount0;
@@ -85,17 +100,14 @@ contract UnboundStrategy {
             tick.tickLower = _ticks[i].tickLower;
             tick.tickUpper = _ticks[i].tickUpper;
             ticks.push(tick);
+            totalAmount0 = totalAmount0.add(_ticks[i].amount0);
+            totalAmount1 = totalAmount1.add(_ticks[i].amount1);
         }
 
-
-        // // check that ticks do not match
-        // for (uint256 i = 0; i < ticks.length; i++) {
-        //     int24 tickLower = ticks[i].tickLower;
-
-        //     for (uint256 i = 0; i < ticks.length; i++) {
-        //         int24 repeated
-        //     }
-        // }
+        // require(
+        //     totalAmount0 <= allowedAmount0 && totalAmount1 <= allowedAmount1,
+        //     "total amounts exceed"
+        // );
     }
 
     /**
@@ -122,8 +134,9 @@ contract UnboundStrategy {
         // TODO: Make sure we check the maximum added amounts from aggregator, only allow to add amounts the strtategy is holding in aggregator
         require(ticks.length <= 5, "invalid number of ticks");
         changeTicks(_ticks);
+        swapAmount = 0;
+        hold = false;
         IAggregator(aggregator).rebalance(address(this));
-        // TODO: set swap amount to zero
     }
 
     /**
@@ -136,12 +149,30 @@ contract UnboundStrategy {
         uint256 _swapAmount,
         uint160 _allowedSlippage,
         uint256 _allowedPriceSlippage,
+        bool _zeroToOne,
         Tick[] memory _ticks
-    ) external onlyOperator isInitialized {
+    ) external {
+        // console.log("swap and rebalance");
+        // console.log(msg.sender);
+        // console.log(operator);
+        // require(msg.sender == operator, "not manager");
+        // require(initialized, "Ownable: strategy not initialized");
+
+        zeroToOne = _zeroToOne;
         swapAmount = _swapAmount;
         allowedSlippage = _allowedSlippage;
         allowedPriceSlippage = _allowedPriceSlippage;
+        hold = false;
+        changeTicks(_ticks);
         IAggregator(aggregator).rebalance(address(this));
+    }
+
+    function holdFunds() external {
+        hold = true;
+        delete ticks;
+        swapAmount = 0;
+        allowedSlippage = 0;
+        allowedPriceSlippage = 0;
     }
 
     /**

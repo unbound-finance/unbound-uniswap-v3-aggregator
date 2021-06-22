@@ -28,7 +28,7 @@ interface IUnboundStrategy {
 
     // if this variable is present, rebalance will swap the amount and redeploy
     // into newly provided ranges
-    function swapAmount() external view returns (int256);
+    function swapAmount() external view returns (uint256);
 
     // the direction of the swap, if enabled
     function zeroToOne() external view returns (bool);
