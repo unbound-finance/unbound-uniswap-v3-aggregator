@@ -61,7 +61,6 @@ contract UnboundStrategy {
         aggregator = _aggregator;
         pool = _pool;
         operator = _operator;
-        fee = 0;
     }
 
     // Modifiers
@@ -169,10 +168,12 @@ contract UnboundStrategy {
 
     function holdFunds() external {
         hold = true;
+        console.log("hold from strategy", hold);
         delete ticks;
         swapAmount = 0;
         allowedSlippage = 0;
         allowedPriceSlippage = 0;
+        IAggregator(aggregator).rebalance(address(this));
     }
 
     /**

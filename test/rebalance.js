@@ -132,8 +132,6 @@ describe("🟢  Adding Liquidity in single order", function () {
 
     const ticks = await aggregator.getTicks(strategy1.address);
 
-    console.log(ticks);
-
     await strategy1.changeTicksAndRebalance([
       [
         "5000000000000000000",
@@ -174,9 +172,6 @@ describe("🟢  Adding Liquidity in single order", function () {
     );
     const newTicksData = await aggregator.getTicks(strategy1.address);
 
-    console.log("oldTickData", oldTicksData);
-    console.log("newTicksData", newTicksData);
-
     expect(parseInt("1000000000000000000")).to.equal(
       newTicksData[0].amount0.toString() - oldTicksData[0].amount0.toString()
     );
@@ -195,7 +190,6 @@ describe("🟢  Adding Liquidity in single order", function () {
       ],
     ]);
     const ticks = await aggregator.getTicks(strategy1.address);
-    console.log("ticks in abel to rebalance", ticks);
     expect(parseInt("350000000000000000000")).to.equal(
       parseInt(ticks[0].amount1)
     );
@@ -261,9 +255,6 @@ describe("🟢 🟢 Rebalance using Multiple Ranges", () => {
       token1After += parseInt(tick.amount1);
     }
 
-    console.log("tokens0After", token0After);
-    console.log("tokens1After", token1After);
-
     expect(token0After).to.equal(parseInt("2000000000000000000"));
     expect(token1After).to.equal(7.838492351944538e21);
   });
@@ -291,14 +282,6 @@ describe("🟢 🟢 Rebalance using Multiple Ranges", () => {
 
 describe("🤯 Swap With Rebalance", () => {
   beforeEach("Add liquidity and swap amount", async () => {
-    const balanceInToken0 = await token0.balanceOf(aggregator.address);
-    const balanceInToken1 = await token1.balanceOf(aggregator.address);
-
-    console.log({
-      balanceInToken0,
-      balanceInToken1,
-    });
-
     // adds 10 and 31630.148889005883
     await aggregator
       .connect(owner)
@@ -312,7 +295,6 @@ describe("🤯 Swap With Rebalance", () => {
       );
 
     const unusedBefore = await aggregator.unused(strategy1.address);
-    console.log(unusedBefore);
 
     await strategy1.swapAndRebalance(
       "2000000000000000000",
@@ -338,16 +320,6 @@ describe("🤯 Swap With Rebalance", () => {
 
   it("updates the unused amounts", async () => {
     const unused = await aggregator.unused(strategy1.address);
-    console.log(
-      "balance of token0",
-      await token0.balanceOf(aggregator.address)
-    );
-    console.log(
-      "balance of token1",
-      await token1.balanceOf(aggregator.address)
-    );
-
-    console.log(await aggregator.getTicks(strategy1.address));
     expect(unused.amount0.toString()).to.equal(
       await token0.balanceOf(aggregator.address)
     );
@@ -356,92 +328,93 @@ describe("🤯 Swap With Rebalance", () => {
     );
   });
 
-  it("rebaalnces again", async () => {
-    await token0.transfer(userA.address, "1000000000000000000000");
-    await token1.transfer(userA.address, "1758008509945496673626415400");
-    await token0
-      .connect(userA)
-      .approve(aggregator.address, "1000000000000000000000");
-    await token1
-      .connect(userA)
-      .approve(aggregator.address, "1758008509945496673626415400");
+  it("updates the used amounts correctly", async () => {
 
-    console.log(
-      "approval of token0",
-      await token0.allowance(userA.address, aggregator.address)
-    );
-    console.log(
-      "approval of token1",
-      await token1.allowance(userA.address, aggregator.address)
-    );
+  });
+});
 
+describe("✋  Hold Funds", () => {
+  beforeEach("Add liquidity and swap amount", async () => {
+    // adds 10 and 31630.148889005883
     await aggregator
-      .connect(userA)
+      .connect(owner)
       .addLiquidity(
         strategy1.address,
-        "30000000000000000000",
+        "10000000000000000000",
         "17580085099454966736264154",
         0,
         0,
         0
       );
 
-    await aggregator
-      .connect(userA)
-      .addLiquidity(
-        strategy1.address,
-        "30000000000000000000",
-        "17580085099454966736264154",
-        0,
-        0,
-        0
-      );
+    const unusedBefore = await aggregator.unused(strategy1.address);
 
     await strategy1.swapAndRebalance(
-      "1500000000000000000",
+      "2000000000000000000",
       "1000000",
       "1000000",
       true,
       [
         [
-          "2000000000000000000",
+          "1000000000000000000",
           "35000000000000000000000",
-          calculateTick(2800, 60),
+          calculateTick(2600, 60),
           calculateTick(3300, 60),
         ],
         [
-          "2000000000000000000",
+          "1000000000000000000",
           "35000000000000000000000",
-          calculateTick(2000, 60),
+          calculateTick(2300, 60),
           calculateTick(3700, 60),
         ],
+      ]
+    );
+  });
+
+  it("it updates the unused amounts", async () => {
+    // await strategy1.holdFunds();
+    console.log("is hold from strategy true?", await strategy1.hold());
+    const aum = await aggregator.getAUM(strategy1.address);
+    const ticks = await aggregator.getTicks(strategy1.address);
+    const unused = await aggregator.unused(strategy1.address);
+    console.log("aum", aum);
+    console.log("unused", unused);
+    console.log("ticks", ticks);
+
+    const tickLowerX = calculateTick(2300, 60);
+    const tickUpperX = calculateTick(3700, 60);
+
+    console.log({
+      tickLowerX,
+      tickUpperX,
+    });
+
+    await strategy1.swapAndRebalance(
+      toGwei(3900.6880796999767),
+      "1000000",
+      "1000000",
+      false,
+      [
         [
-          "2000000000000000000",
-          "35000000000000000000000",
-          calculateTick(2000, 60),
-          calculateTick(3900, 60),
+          toGwei(9.296328671820293),
+          toGwei(33711.278254018514),
+          calculateTick(2300, 60),
+          calculateTick(3700, 60),
         ],
       ]
     );
 
-    const ticks = await aggregator.getTicks(strategy1.address);
-    console.log(ticks);
+    console.log("====== final rebalance ====")
 
-    const newTicks = await aggregator.getTicks(strategy1.address);
-    console.log(newTicks);
+    await strategy1.swapAndRebalance(toGwei(0), "1000000", "1000000", false, [
+      [
+        toGwei(1.296328671820293),
+        toGwei(33.278254018514),
+        calculateTick(2400, 60),
+        calculateTick(3800, 60),
+      ],
+    ]);
   });
-
-  // it("updates used amounts", async () => {
-  //   let token0After = 0,
-  //     token1After = 0;
-  //   const ticksAfter = await aggregator.getTicks(strategy1.address);
-  //   for (const tick of ticksAfter) {
-  //     token0After += parseInt(tick.amount0);
-  //     token1After += parseInt(tick.amount1);
-  //   }
-  //   expect(3.862630017115979e22).to.equal(3.862630017115979e22);
-  //   // expect(token0After).to.equal(parseInt("2000000000000000000"));
-  // });
 });
 
 // deploy test tokens

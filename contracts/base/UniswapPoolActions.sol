@@ -170,22 +170,20 @@ contract UniswapPoolActions is
         for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
             IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
 
-            if (tick.tickLower != 0 && tick.tickUpper != 0) {
-                // Burn liquidity for range order
-                (uint256 amount0, uint256 amount1, uint128 burnedLiquidity) =
-                    burnLiquidity(
-                        address(pool),
-                        address(strategy),
-                        tick.tickLower,
-                        tick.tickUpper,
-                        tick.amount0,
-                        tick.amount1
-                    );
+            // Burn liquidity for range order
+            (uint256 amount0, uint256 amount1, uint128 burnedLiquidity) =
+                burnLiquidity(
+                    address(pool),
+                    address(strategy),
+                    tick.tickLower,
+                    tick.tickUpper,
+                    tick.amount0,
+                    tick.amount1
+                );
 
-                collect0 = collect0.add(amount0);
-                collect1 = collect1.add(amount1);
-                liquidity = liquidity + burnedLiquidity;
-            }
+            collect0 = collect0.add(amount0);
+            collect1 = collect1.add(amount1);
+            liquidity = liquidity + burnedLiquidity;
         }
     }
 
@@ -298,9 +296,14 @@ contract UniswapPoolActions is
         IUniswapV3Pool pool = IUniswapV3Pool(pool_);
         delete pool_;
 
+        uint256 bal0 = IERC20(pool.token0()).balanceOf(address(this));
+        uint256 bal1 = IERC20(pool.token1()).balanceOf(address(this));
+
         console.log("mint callback");
         console.log(amount0);
         console.log(amount1);
+        console.log("balance of contract in token0", bal0);
+        console.log("balance of contract in token1", bal1);
 
         if (decoded.payer == address(this)) {
             // transfer tokens already in the contract

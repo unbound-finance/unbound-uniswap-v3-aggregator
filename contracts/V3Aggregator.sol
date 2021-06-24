@@ -53,6 +53,10 @@ contract V3Aggregator is
         int24 tickUpper
     );
 
+    // TODO: Remove this later, only for testing on Kovan
+    uint256 public recentlyBurned0;
+    uint256 public recentlyBurned1;
+
     constructor(address _governance) {
         governance = _governance;
         feeTo = address(0);
@@ -214,6 +218,7 @@ contract V3Aggregator is
         burnShare(_strategy, _shares, msg.sender);
 
         // transfer the tokens back
+        // TODO: Add safe transfers here
         if (amount0 > 1000) {
             IERC20(pool.token0()).transfer(msg.sender, amount0);
         }
@@ -236,31 +241,42 @@ contract V3Aggregator is
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage oldStrategy = strategies[_strategy];
 
-        uint256 newAmount0;
-        uint256 newAmount1;
-
         // add blacklisting check
+        // TODO: Remove this check
         require(!blacklisted[_strategy], "blacklisted");
 
         uint128 liquidity;
 
         // if hold is activated in strategy, strategy will burn the funds and hold
         if (strategy.hold()) {
+            console.log("funds are on hold");
+
             // burn liquidity
             (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
 
-            IUnboundStrategy.Tick[] memory ticks = oldStrategy.ticks;
-            // store the values contract is holding
+            // TODO: Remove this
+            uint256 recentlyBurned0 = amount0;
+            uint256 recentlyBurned1 = amount1;
+
+            // store the values contract  is holding
             increaseUnusedAmounts(_strategy, amount0, amount1);
-            // update amounts in the strategy
-            updateStrategy(_strategy, false, 0, 0, 0);
+
+            // tell contract that funds are on hold
+            oldStrategy.hold = true;
+
+            // delete the old ticks data
+            delete oldStrategy.ticks;
         } else if (oldStrategy.hold) {
             // if hold has been enabled in previous update, deploy the hold
             // amount in the current ranges
             (amount0, amount1) = getUnusedAmounts(_strategy);
 
+            // TODO: Remove this
+            uint256 recentlyBurned0 = amount0;
+            uint256 recentlyBurned1 = amount1;
+
             // redploy the liquidity
-            (newAmount0, newAmount1) = redeploy(_strategy, amount0, amount1);
+            redeploy(_strategy, amount0, amount1);
         } else {
             (uint256 unusedAmount0, uint256 unusedAmount1) =
                 getUnusedAmounts(_strategy);
@@ -272,9 +288,13 @@ contract V3Aggregator is
             // redploy the liquidity
             redeploy(
                 _strategy,
-                collect0 + unusedAmount0,
-                collect1 + unusedAmount1
+                collect0.add(unusedAmount0),
+                collect1.add(unusedAmount1)
             );
+
+            // TODO: Remove this
+            uint256 recentlyBurned0 = collect0.add(unusedAmount0);
+            uint256 recentlyBurned1 = collect1.add(unusedAmount1);
         }
     }
 
@@ -295,11 +315,11 @@ contract V3Aggregator is
 
         // check that swap amount should not exceed amounts managed
         // TODO: Rethink about this check
-        if (strategy.zeroToOne()) {
-            require(strategy.swapAmount() <= totalAmount0);
-        } else {
-            require(strategy.swapAmount() <= totalAmount1);
-        }
+        // if (strategy.zeroToOne()) {
+        //     require(strategy.swapAmount() <= totalAmount0, "swap amounts exceed");
+        // } else {
+        //     require(strategy.swapAmount() <= totalAmount1, "swap amounts exceed");
+        // }
 
         // swap tokens
         (amountOut) = swap(
@@ -342,18 +362,13 @@ contract V3Aggregator is
             deployedAmount1 = deployedAmount1.add(amount1);
         }
 
+        console.log("deployed amounts after swap");
+        console.log(amount0);
+        console.log(amount1);
+
+        // return total deployed amounts
         amount0 = deployedAmount0;
         amount1 = deployedAmount1;
-
-        // // check if the total amounts are always less than the managed
-        // if(strategy.zeroToOne()) {
-        //     amount0 = deployedAmount0.add(strategy.swapAmount());
-        //     amount1 = deployedAmount1.sub(amountOut);
-        // }
-        // else {
-        //     amount0 = deployedAmount0.sub(amountOut);
-        //     amount1 = deployedAmount1.add(strategy.swapAmount());
-        // }
     }
 
     /**
@@ -379,25 +394,29 @@ contract V3Aggregator is
 
             (amount0, amount1, amountOut) = swapAndRedeploy(_strategy);
 
-            console.log("total deployed after swap");
-            console.log("amount0", amount0);
-            console.log("amount1", amount1);
-            console.log("swapAmount", strategy.swapAmount());
-            console.log("amountOut", amountOut);
+            console.log("total deployed");
+            console.log(amount0);
+            console.log(amount1);
 
+            // get unused amounts
             if (strategy.zeroToOne()) {
+                // if deployed amount0 is greater than burned amount0
+                // substract swap amount from burned amount0
                 if (amount0 >= _amount0.sub(strategy.swapAmount())) {
                     amount0 = 0;
                 } else {
                     amount0 = _amount0.sub(strategy.swapAmount()).sub(amount0);
                 }
 
+                // add the amount after swapped to burned amount
                 if (amount1 >= _amount1.add(amountOut)) {
                     amount1 = 0;
                 } else {
                     amount1 = _amount1.add(amountOut).sub(amount1);
                 }
             } else {
+                // if the swap is happening in reverse direction
+                // .. substract swap amount from amount1
                 if (amount1 >= _amount1.sub(strategy.swapAmount())) {
                     amount1 = 0;
                 } else {
@@ -407,7 +426,7 @@ contract V3Aggregator is
                 if (amount0 >= _amount0.add(amountOut)) {
                     amount0 = 0;
                 } else {
-                    amount0 = _amount1.add(amountOut).sub(amount0);
+                    amount0 = _amount0.add(amountOut).sub(amount0);
                 }
             }
 
@@ -425,7 +444,6 @@ contract V3Aggregator is
             for (uint256 i = 0; i < strategy.tickLength(); i++) {
                 IUnboundStrategy.Tick memory tick = strategy.ticks(i);
 
-                // the amount going in mint liquidity should be influenced by swap amount;
                 (amount0, amount1) = mintLiquidity(
                     address(pool),
                     tick.tickLower,
@@ -446,11 +464,19 @@ contract V3Aggregator is
                 // update total amounts
                 totalAmount0 = totalAmount0.add(amount0);
                 totalAmount1 = totalAmount1.add(amount1);
+
+                console.log("total deployed");
+                console.log(amount0);
+                console.log(amount1);
             }
 
             // to calculate unused amount substract the deployed amounts from original amounts
             amount0 = _amount0.sub(totalAmount0);
             amount1 = _amount1.sub(totalAmount1);
+
+            console.log("unused amounts");
+            console.log(amount0);
+            console.log(amount1);
 
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);

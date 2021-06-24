@@ -9,6 +9,9 @@ import "./AggregatorBase.sol";
 
 import "../interfaces/IUnboundStrategy.sol";
 
+// TODO: Remove
+import "hardhat/console.sol";
+
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
@@ -156,8 +159,10 @@ contract AggregatorManagement is AggregatorBase {
                 .div(uint256(_liquidityBefore));
         }
 
+        console.log("strategy fee", strategy.fee());
+
         // strategy owner fees
-        // if (strategy.fee() > 0) {
+        // if (uint256(strategy.fee()) > 0) {
         //     uint256 managerShare = share.mul(strategy.fee()).div(1e6);
         //     mintShare(_strategy, managerShare, strategy.feeTo());
         //     share = share.sub(managerShare);
@@ -193,87 +198,6 @@ contract AggregatorManagement is AggregatorBase {
     }
 
     /**
-     * @dev Updates strategy data for future use
-     * @param _strategy Address of the strategy
-     */
-    function updateStrategy(
-        address _strategy,
-        bool _specificUpdate,
-        uint256 _tickId,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-        Strategy storage localStrategyData = strategies[_strategy];
-        localStrategyData.hold = strategy.hold();
-
-        if (localStrategyData.ticks.length > 0) {
-            IUnboundStrategy.Tick memory oldTick =
-                localStrategyData.ticks[_tickId];
-            delete localStrategyData.ticks;
-            for (uint256 i = 0; i < strategy.tickLength(); i++) {
-                IUnboundStrategy.Tick memory tick = strategy.ticks(i);
-
-                IUnboundStrategy.Tick memory newTick;
-                newTick.tickLower = tick.tickLower;
-                newTick.tickUpper = tick.tickUpper;
-                // if the provided tick id matches with index
-                // update the amounts directly else continue with old amounts
-                if (i == _tickId) {
-                    newTick.amount0 = _amount0;
-                    newTick.amount1 = _amount1;
-                } else {
-                    newTick.amount0 = oldTick.amount0;
-                    newTick.amount1 = oldTick.amount1;
-                }
-
-                localStrategyData.ticks.push(newTick);
-            }
-        } else {
-
-            for (uint256 i = 0; i < strategy.tickLength(); i++) {
-                IUnboundStrategy.Tick memory tick = strategy.ticks(i);
-
-                IUnboundStrategy.Tick memory newTick;
-                newTick.tickLower = tick.tickLower;
-                newTick.tickUpper = tick.tickUpper;
-                // if the provided tick id matches with index
-                // update the amounts directly else continue with old amounts
-                if (i == _tickId) {
-                    newTick.amount0 = _amount0;
-                    newTick.amount1 = _amount1;
-                }
-
-                localStrategyData.ticks.push(newTick);
-            }
-        }
-    }
-
-    function adjustArray(address _strategy) internal {
-        Strategy storage newStrategy = strategies[_strategy];
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-
-        // get the number of indexes to delete
-        uint256 arrayLength;
-        if (strategy.tickLength() > newStrategy.ticks.length) {
-            arrayLength = strategy.tickLength().sub(newStrategy.ticks.length);
-        } else if (strategy.tickLength() < newStrategy.ticks.length) {
-            arrayLength = newStrategy.ticks.length.sub(strategy.tickLength());
-        }
-
-        // delete the indexes required
-        if (strategy.tickLength() != newStrategy.ticks.length) {
-            for (uint256 i = 0; i < arrayLength; i++) {
-                // adjust the indexes
-                for (uint256 j = i; j < newStrategy.ticks.length - 1; j++) {
-                    newStrategy.ticks[j] = newStrategy.ticks[j + 1];
-                }
-                newStrategy.ticks.pop();
-            }
-        }
-    }
-
-    /**
      * @dev Increase amounts in the current ticks
      * @param _strategy The array of ticks
      * @param _tickId The tick to update
@@ -288,7 +212,7 @@ contract AggregatorManagement is AggregatorBase {
     ) internal {
         Strategy storage localStrategyData = strategies[_strategy];
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-        
+
         if (localStrategyData.ticks.length == 0) {
             updateUsedAmounts(_strategy, _tickId, _amount0, _amount1);
         } else {
@@ -329,62 +253,6 @@ contract AggregatorManagement is AggregatorBase {
             newTick.amount0 = _amount0;
             newTick.amount1 = _amount1;
         }
-
-        // // first delete that variable push it and rewrite
-        // if (localStrategyData.ticks.length == 0) {
-        //     IUnboundStrategy.Tick memory newTick;
-        //     newTick.tickLower = strategy.ticks(_tickId).tickLower;
-        //     newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
-        //     newTick.amount0 = _amount0;
-        //     newTick.amount1 = _amount1;
-        //     localStrategyData.ticks.push(newTick);
-        // } else {
-        //     IUnboundStrategy.Tick memory newTick =
-        //         localStrategyData.ticks[_tickId];
-        //     newTick.tickLower = strategy.ticks(_tickId).tickLower;
-        //     newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
-        //     newTick.amount0 = _amount0;
-        //     newTick.amount1 = _amount1;
-        //     localStrategyData.ticks.push(newTick);
-
-        //     uint256 newLength = localStrategyData.ticks.length;
-
-        //     uint256 arrayLength;
-        //     if (newLength > oldLength) {
-        //         arrayLength = newLength.sub(oldLength);
-        //     } else if (newLength > oldLength) {
-        //         arrayLength = oldLength.sub(newLength);
-        //     }
-
-        //     if (localStrategyData.ticks.length > 1) {
-        //         if (oldLength != newLength) {
-        //             for (uint256 i = 0; i < arrayLength; i++) {
-        //                 for (
-        //                     uint256 j = i;
-        //                     j < localStrategyData.ticks.length - 1;
-        //                     j++
-        //                 ) {
-        //                     localStrategyData.ticks[j] = localStrategyData
-        //                         .ticks[j + 1];
-        //                 }
-        //                 localStrategyData.ticks.pop();
-        //                 reverse(localStrategyData.ticks);
-        //             }
-        //         }
-        //     }
-        // }
-    }
-
-    function reverse(IUnboundStrategy.Tick[] storage ticks)
-        internal
-        returns (bool)
-    {
-        address t;
-        for (uint256 i = 0; i < ticks.length / 2; i++) {
-            IUnboundStrategy.Tick storage t = ticks[i];
-            ticks[i] = ticks[ticks.length - i - 1];
-            ticks[ticks.length - i - 1] = t;
-        }
     }
 
     /**
@@ -403,15 +271,11 @@ contract AggregatorManagement is AggregatorBase {
         Strategy storage localStrategyData = strategies[_strategy];
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
 
-        if (localStrategyData.ticks.length == 0) {
-            updateUsedAmounts(_strategy, _tickId, _amount0, _amount1);
-        } else {
-            updateUsedAmounts(
-                _strategy,
-                _tickId,
-                localStrategyData.ticks[_tickId].amount0.sub(_amount0),
-                localStrategyData.ticks[_tickId].amount1.sub(_amount1)
-            );
-        }
+        updateUsedAmounts(
+            _strategy,
+            _tickId,
+            localStrategyData.ticks[_tickId].amount0.sub(_amount0),
+            localStrategyData.ticks[_tickId].amount1.sub(_amount1)
+        );
     }
 }

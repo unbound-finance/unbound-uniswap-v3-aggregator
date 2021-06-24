@@ -16,11 +16,11 @@ async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
 
   const config = {
-    dai: "0xB0E810B60813A61e8214E4d688cCB78e495Fc081",
-    eth: "0x6E650Bf5216b8aFC84576061E22F5D7Ed3EA3bFE",
-    pool: "0x23450701eA9F672cd8dF5796AAcD07a9c1d996bb",
-    strategy: "0x6B28d8C72371d17C88709D3d517e5b2803F12C3f",
-    v3Aggregator: "0x87B1EbCE964eAf8D65c51B3d96ff7bD27E5C4D0f",
+    dai: '0x10DAF88Aef79FD82369A5f5c158FfC093a58021a',
+    eth: '0xF77c21C32b03550EdcB3e1c92760544888094c5C',
+    pool: '0xF2fA4A3915Bd00de50F1d250CD6CA578C4204cd6',
+    strategy: '0xC9536BcC7AE571bDBCBcF6AB6eEF13D4153656C5',
+    v3Aggregator: '0xBD15C17260C0D1b4a4e7b73F67A5871Be62A3AbC'
   };
 
   const _strategy = config.strategy;
@@ -53,12 +53,19 @@ async function main() {
   const tvl = await aggregator.getAUM(_strategy);
   const token0Bal = await token0.balanceOf(owner);
   const token1Bal = await token1.balanceOf(owner);
+  const burnedAmount0 = await aggregator.recentlyBurned0();
+  const burnedAmount1 = await aggregator.recentlyBurned1();
 
   // console.log(ticks);
 
   // console.log("token0", await pool.token0());
 
   // await changeTicksAndRebalance(_strategy);
+
+  console.log({
+    burnedAmount0,
+    burnedAmount1
+  })
 
   console.log({
     shares,
@@ -86,11 +93,16 @@ async function main() {
       amount0: tvl.amount0.toString(),
       amount1: tvl.amount1.toString(),
     },
+    liquidityValue: (await pool.liquidity()).toString(),
+    allTicks: ticks,
   });
+
+  // await holdFund();
+  // await changeTicksAndRebalance(_strategy);
 
   // console.log(tvl);
 
-  await changeTicksAndRebalance(_strategy);
+  // await changeTicksAndRebalance(_strategy);
   // await changeTicksAndRebalance(_strategy);
 
   // await changeTicksAndRebalance(_strategy);
@@ -186,6 +198,11 @@ async function main() {
 //   console.log(tx);
 // }
 
+async function holdFund() {
+  const tx = await strategy.holdFunds();
+  console.log(tx);
+}
+
 async function changeTicksAndRebalance(_strategy) {
   // const tickLower = calculateTick(0.00025, 60);
   // const tickUpper = calculateTick(0.0003333333333333333, 60);
@@ -197,15 +214,11 @@ async function changeTicksAndRebalance(_strategy) {
 
   // [15596.867398363842, 3.7415834221929125, -82920, -80040], [12276.52368152808, 0.591446184039982, -82140, -78240]
   const tx = await strategy.swapAndRebalance(
-    toGwei(0.4491771272914921),
+    toGwei(14.402835656046523),
     "1000000",
     "1000000",
     true,
-    [
-      [toGwei(1), toGwei(100), 80040, 82920],
-      [toGwei(1), toGwei(200), 75960, 82920],
-      [toGwei(2), toGwei(37889.72347739101), 75960, 80040],
-    ],
+    [[toGwei(22.10276257899523), toGwei(0.001627392823741774), -82920, -75960]],
     {
       gasLimit: 10000000,
     }
