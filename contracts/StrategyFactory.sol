@@ -28,7 +28,6 @@ contract StrategyFactory {
         returns (address strategy)
     {
         strategy = address(new UnboundStrategy(aggregator, _pool, _operator));
-        console.log("new strategy deployed", strategy);
         strategies[total] = strategy;
         total++;
     }

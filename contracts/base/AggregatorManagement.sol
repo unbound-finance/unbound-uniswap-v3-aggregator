@@ -161,7 +161,7 @@ contract AggregatorManagement is AggregatorBase {
 
         console.log("strategy fee", strategy.fee());
 
-        // strategy owner fees
+        // // strategy owner fees
         // if (uint256(strategy.fee()) > 0) {
         //     uint256 managerShare = share.mul(strategy.fee()).div(1e6);
         //     mintShare(_strategy, managerShare, strategy.feeTo());

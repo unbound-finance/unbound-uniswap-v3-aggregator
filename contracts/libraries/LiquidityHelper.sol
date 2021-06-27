@@ -46,6 +46,7 @@ library LiquidityHelper {
         );
     }
 
+    // TODO: Change this function to internal
     /**
      * @notice Calculates the liquidity amount using current ranges
      * @param _pool Address of the pool
@@ -67,6 +68,27 @@ library LiquidityHelper {
         // calculate liquidity needs to be added
         (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
             sqrtRatioX96,
+            TickMath.getSqrtRatioAtTick(_tickLower),
+            TickMath.getSqrtRatioAtTick(_tickUpper),
+            _liquidity
+        );
+    }
+
+    // TODO: Remove this function
+    function getAmountsForLiquidityTest(
+        address _pool,
+        uint160 _sqrtRatioX96,
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _liquidity
+    ) external view returns (uint256 amount0, uint256 amount1) {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+
+        // get sqrtRatios required to calculate liquidity
+
+        // calculate liquidity needs to be added
+        (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
+            _sqrtRatioX96,
             TickMath.getSqrtRatioAtTick(_tickLower),
             TickMath.getSqrtRatioAtTick(_tickUpper),
             _liquidity
@@ -101,64 +123,65 @@ library LiquidityHelper {
         }
     }
 
-    function getAccumulatedFees(
-        address _pool,
-        int24 _tickLower,
-        int24 _tickUpper
-    ) internal returns (uint128 amount0, uint128 amount1) {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-        // get current liquidity for range order
-        (, , , uint128 tokensOwed0, uint128 tokensOwed1) =
-            pool.positions(
-                PositionKey.compute(address(this), _tickLower, _tickUpper)
-            );
 
-        uint128 amount0Liquidity =
-            LiquidityAmounts.getLiquidityForAmount0(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                tokensOwed0
-            );
+    // function getAccumulatedFees(
+    //     address _pool,
+    //     int24 _tickLower,
+    //     int24 _tickUpper
+    // ) internal returns (uint128 amount0, uint128 amount1) {
+    //     IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+    //     // get current liquidity for range order
+    //     (, , , uint128 tokensOwed0, uint128 tokensOwed1) =
+    //         pool.positions(
+    //             PositionKey.compute(address(this), _tickLower, _tickUpper)
+    //         );
 
-        uint128 amount1Liquidity =
-            LiquidityAmounts.getLiquidityForAmount0(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                tokensOwed1
-            );
+    //     uint128 amount0Liquidity =
+    //         LiquidityAmounts.getLiquidityForAmount0(
+    //             TickMath.getSqrtRatioAtTick(_tickLower),
+    //             TickMath.getSqrtRatioAtTick(_tickUpper),
+    //             tokensOwed0
+    //         );
 
-        // get liquidity for amounts owned
-        (
-            ,
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128,
-            ,
+    //     uint128 amount1Liquidity =
+    //         LiquidityAmounts.getLiquidityForAmount0(
+    //             TickMath.getSqrtRatioAtTick(_tickLower),
+    //             TickMath.getSqrtRatioAtTick(_tickUpper),
+    //             tokensOwed1
+    //         );
 
-        ) =
-            pool.positions(
-                PositionKey.compute(address(this), _tickLower, _tickUpper)
-            );
+    //     // get liquidity for amounts owned
+    //     (
+    //         ,
+    //         uint256 feeGrowthInside0LastX128,
+    //         uint256 feeGrowthInside1LastX128,
+    //         ,
 
-        // divide fee growth by liquidity
-        amount0Liquidity = uint128(feeGrowthInside0LastX128) / amount0Liquidity;
-        amount1Liquidity = uint128(feeGrowthInside1LastX128) / amount1Liquidity;
+    //     ) =
+    //         pool.positions(
+    //             PositionKey.compute(address(this), _tickLower, _tickUpper)
+    //         );
 
-        amount0 = uint128(
-            LiquidityAmounts.getAmount0ForLiquidity(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                amount0Liquidity
-            )
-        );
+    //     // divide fee growth by liquidity
+    //     amount0Liquidity = uint128(feeGrowthInside0LastX128) / amount0Liquidity;
+    //     amount1Liquidity = uint128(feeGrowthInside1LastX128) / amount1Liquidity;
 
-        amount1 = uint128(
-            LiquidityAmounts.getAmount1ForLiquidity(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                amount1Liquidity
-            )
-        );
+    //     amount0 = uint128(
+    //         LiquidityAmounts.getAmount0ForLiquidity(
+    //             TickMath.getSqrtRatioAtTick(_tickLower),
+    //             TickMath.getSqrtRatioAtTick(_tickUpper),
+    //             amount0Liquidity
+    //         )
+    //     );
 
-        // convert the divided liquidity value to amounts and return amounts
-    }
+    //     amount1 = uint128(
+    //         LiquidityAmounts.getAmount1ForLiquidity(
+    //             TickMath.getSqrtRatioAtTick(_tickLower),
+    //             TickMath.getSqrtRatioAtTick(_tickUpper),
+    //             amount1Liquidity
+    //         )
+    //     );
+
+    //     // convert the divided liquidity value to amounts and return amounts
+    // }
 }

@@ -2,6 +2,8 @@ const { expect } = require("chai");
 
 const { BigNumber, utils } = require("ethers");
 
+const { ethers } = require("hardhat");
+
 const {
   encodePriceSqrt,
   toGwei,
@@ -17,6 +19,8 @@ let Aggregator;
 let userA;
 let userB;
 
+let LiquidityHelper;
+
 // import artifacts
 async function loadContracts() {
   UniswapV3Factory = await ethers.getContractFactory("UniswapV3Factory");
@@ -24,6 +28,7 @@ async function loadContracts() {
   TestToken = await ethers.getContractFactory("ERC20");
   DefiEdgeStrategy = await ethers.getContractFactory("UnboundStrategy");
   Aggregator = await ethers.getContractFactory("V3Aggregator");
+  LiquidityHelper = await ethers.getContractFactory("LiquidityHelper");
 }
 
 let token0;
@@ -328,8 +333,45 @@ describe("🤯 Swap With Rebalance", () => {
     );
   });
 
-  it("updates the used amounts correctly", async () => {
+  it("updates the used amounts correctly", async () => {});
+});
 
+describe("🐛 Bug", () => {
+  it("consoles sqrt prices", async () => {
+    const liquidityHelper = await LiquidityHelper.deploy();
+
+    const ticks = [
+      {
+        position: { liquidity: '59149315408003957658080' },
+        tickLower: 75960,
+        tickUpper: 80040,
+        amount0: '0',
+        amount1: '597000512740656199999958'
+      },
+      {
+        position: { liquidity: '22590063369273683733806' },
+        tickLower: 80700,
+        tickUpper: 82380,
+        amount0: '14435334389111013793',
+        amount1: '59392228757136813999998'
+      }
+    ];
+
+    for (tick in ticks) {
+      const amountsFromLiquidity =
+        await liquidityHelper.getAmountsForLiquidityTest(
+          pool.address,
+          "4687189220205140070798390409657",
+          ticks[tick].tickLower,
+          ticks[tick].tickUpper,
+          ticks[tick].position.liquidity
+        );
+
+      console.log({
+        amount0: amountsFromLiquidity.amount0.toString(),
+        amount1: amountsFromLiquidity.amount1.toString(),
+      });
+    }
   });
 });
 
@@ -373,22 +415,12 @@ describe("✋  Hold Funds", () => {
 
   it("it updates the unused amounts", async () => {
     // await strategy1.holdFunds();
-    console.log("is hold from strategy true?", await strategy1.hold());
     const aum = await aggregator.getAUM(strategy1.address);
     const ticks = await aggregator.getTicks(strategy1.address);
     const unused = await aggregator.unused(strategy1.address);
-    console.log("aum", aum);
-    console.log("unused", unused);
-    console.log("ticks", ticks);
 
     const tickLowerX = calculateTick(2300, 60);
     const tickUpperX = calculateTick(3700, 60);
-
-    console.log({
-      tickLowerX,
-      tickUpperX,
-    });
-
     await strategy1.swapAndRebalance(
       toGwei(3900.6880796999767),
       "1000000",
@@ -404,14 +436,21 @@ describe("✋  Hold Funds", () => {
       ]
     );
 
-    console.log("====== final rebalance ====")
-
     await strategy1.swapAndRebalance(toGwei(0), "1000000", "1000000", false, [
       [
-        toGwei(1.296328671820293),
+        toGwei(0.01296328671820293),
         toGwei(33.278254018514),
         calculateTick(2400, 60),
         calculateTick(3800, 60),
+      ],
+    ]);
+
+    await strategy1.swapAndRebalance(toGwei(0), "1000000", "1000000", false, [
+      [
+        toGwei(9.296328671820293),
+        toGwei(33711.278254018514),
+        calculateTick(2500, 60),
+        calculateTick(4000, 60),
       ],
     ]);
   });

@@ -113,41 +113,48 @@ contract UniswapPoolActions is
         )
     {
         // calculate current liquidity
+        // substract 100 GWEI to counter with precision error coming from Uniswap
         liquidity = LiquidityHelper.getLiquidityForAmounts(
             _pool,
             _tickLower,
             _tickUpper,
-            _amount0,
-            _amount1
+            _amount0 > 100 ? _amount0.sub(100) : 0,
+            _amount1 > 100 ? _amount1.sub(100) : 0
         );
 
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
-        uint256 owed0;
-        uint256 owed1;
+        uint256 tokensBurned0;
+        uint256 tokensBurned1;
 
         // burn liquidity
         if (liquidity > 0) {
-            (owed0, owed1) = pool.burn(_tickLower, _tickUpper, liquidity);
+            (tokensBurned0, tokensBurned1) = pool.burn(
+                _tickLower,
+                _tickUpper,
+                liquidity
+            );
         }
 
-        // (uint128 fee0, uint128 fee1) =
-        //     LiquidityHelper.getAccumulatedFees(_pool, _tickLower, _tickUpper);
+        (, , , uint128 tokensOwed0, uint128 tokensOwed1) =
+            pool.positions(
+                PositionKey.compute(address(this), _tickLower, _tickUpper)
+            );
 
         // collect fees
         (collect0, collect1) = pool.collect(
             address(this),
             _tickLower,
             _tickUpper,
-            uint128(owed0),
-            uint128(owed1)
+            uint128(tokensOwed0),
+            uint128(tokensOwed1)
         );
 
         emit FeesClaimed(
             _strategy,
             _pool,
-            uint256(collect0) - owed0,
-            uint256(collect1) - owed1
+            collect0 > _amount0 ? uint256(collect0).sub(_amount0) : 0,
+            collect1 > _amount1 ? uint256(collect1).sub(_amount1) : 0
         );
     }
 
@@ -296,14 +303,14 @@ contract UniswapPoolActions is
         IUniswapV3Pool pool = IUniswapV3Pool(pool_);
         delete pool_;
 
-        uint256 bal0 = IERC20(pool.token0()).balanceOf(address(this));
-        uint256 bal1 = IERC20(pool.token1()).balanceOf(address(this));
+        // uint256 bal0 = IERC20(pool.token0()).balanceOf(address(this));
+        // uint256 bal1 = IERC20(pool.token1()).balanceOf(address(this));
 
-        console.log("mint callback");
-        console.log(amount0);
-        console.log(amount1);
-        console.log("balance of contract in token0", bal0);
-        console.log("balance of contract in token1", bal1);
+        // console.log("mint callback");
+        // console.log(amount0);
+        // console.log(amount1);
+        // console.log("balance of contract in token0", bal0);
+        // console.log("balance of contract in token1", bal1);
 
         if (decoded.payer == address(this)) {
             // transfer tokens already in the contract
@@ -331,6 +338,57 @@ contract UniswapPoolActions is
                     amount1
                 );
             }
+        }
+    }
+
+    /**
+     * @dev Get the liquidity between current ticks
+     * @param _pool Address of the pool
+     * @param _strategy Address of the strategy
+     */
+    function getCurrentLiquidityWithFees(address _pool, address _strategy)
+        internal
+        returns (uint128 liquidity)
+    {
+        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+
+        for (uint256 i = 0; i < strategy.tickLength(); i++) {
+            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+
+            uint128 fees;
+
+            // update fees earned in Uniswap pool
+            // Uniswap recalculates the fees and updates the variables when amount is passed as 0
+            if (liquidity > 0) {
+                pool.burn(tick.tickLower, tick.tickUpper, 0);
+            }
+
+            (
+                uint128 currentLiquidity,
+                ,
+                ,
+                uint128 tokensOwed0,
+                uint128 tokensOwed1
+            ) =
+                pool.positions(
+                    PositionKey.compute(
+                        address(this),
+                        tick.tickLower,
+                        tick.tickUpper
+                    )
+                );
+
+            // convert collected fees in form of liquidity
+            fees = LiquidityHelper.getLiquidityForAmounts(
+                _pool,
+                tick.tickLower,
+                tick.tickUpper,
+                tokensOwed0,
+                tokensOwed1
+            );
+
+            liquidity = liquidity + currentLiquidity + fees;
         }
     }
 }

@@ -100,7 +100,10 @@ contract V3Aggregator is
 
         // get liquidity before adding the new liqudiity
         uint128 liquidityBefore =
-            LiquidityHelper.getCurrentLiquidity(address(pool), _strategy);
+            getCurrentLiquidityWithFees(
+                address(pool),
+                _strategy
+            );
 
         // index 0 will always be an primary tick
         (amount0, amount1) = mintLiquidity(
@@ -164,31 +167,34 @@ contract V3Aggregator is
         uint256 collect0;
         uint256 collect1;
 
-        for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
-            IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
+        if (oldStrategy.ticks.length != 0) {
+            for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
+                IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
 
-            amount0 = tick.amount0.mul(_shares).div(totalShares[_strategy]);
-            amount1 = tick.amount1.mul(_shares).div(totalShares[_strategy]);
+                amount0 = tick.amount0.mul(_shares).div(totalShares[_strategy]);
+                amount1 = tick.amount1.mul(_shares).div(totalShares[_strategy]);
 
-            (amount0, amount1, ) = burnLiquidity(
-                address(pool),
-                _strategy,
-                tick.tickLower,
-                tick.tickUpper,
-                amount0,
-                amount1
-            );
+                (amount0, amount1, ) = burnLiquidity(
+                    address(pool),
+                    _strategy,
+                    tick.tickLower,
+                    tick.tickUpper,
+                    amount0,
+                    amount1
+                );
 
-            // decrease used amounts for each tick
-            decreaseUsedAmounts(_strategy, i, amount0, amount1);
+                // decrease used amounts for each tick
+                decreaseUsedAmounts(_strategy, i, amount0, amount1);
 
-            collect0 = collect0.add(amount0);
-            collect1 = collect1.add(amount1);
+                collect0 = collect0.add(amount0);
+                collect1 = collect1.add(amount1);
+            }
         }
 
         uint256 unusedAmount0;
         uint256 unusedAmount1;
 
+        // TODO: Make sure get unused do not underflow
         // get unused amounts of the strategy
         (unusedAmount0, unusedAmount1) = getUnusedAmounts(_strategy);
 
@@ -218,12 +224,11 @@ contract V3Aggregator is
         burnShare(_strategy, _shares, msg.sender);
 
         // transfer the tokens back
-        // TODO: Add safe transfers here
         if (amount0 > 1000) {
-            IERC20(pool.token0()).transfer(msg.sender, amount0);
+            TransferHelper.safeTransfer(pool.token0(), msg.sender, amount0);
         }
         if (amount1 > 1000) {
-            IERC20(pool.token1()).transfer(msg.sender, amount1);
+            TransferHelper.safeTransfer(pool.token1(), msg.sender, amount1);
         }
 
         emit RemoveLiquidity(_strategy, amount0, amount1);
@@ -249,14 +254,8 @@ contract V3Aggregator is
 
         // if hold is activated in strategy, strategy will burn the funds and hold
         if (strategy.hold()) {
-            console.log("funds are on hold");
-
             // burn liquidity
             (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
-
-            // TODO: Remove this
-            uint256 recentlyBurned0 = amount0;
-            uint256 recentlyBurned1 = amount1;
 
             // store the values contract  is holding
             increaseUnusedAmounts(_strategy, amount0, amount1);
@@ -271,9 +270,7 @@ contract V3Aggregator is
             // amount in the current ranges
             (amount0, amount1) = getUnusedAmounts(_strategy);
 
-            // TODO: Remove this
-            uint256 recentlyBurned0 = amount0;
-            uint256 recentlyBurned1 = amount1;
+            oldStrategy.hold = strategy.hold();
 
             // redploy the liquidity
             redeploy(_strategy, amount0, amount1);
@@ -291,10 +288,6 @@ contract V3Aggregator is
                 collect0.add(unusedAmount0),
                 collect1.add(unusedAmount1)
             );
-
-            // TODO: Remove this
-            uint256 recentlyBurned0 = collect0.add(unusedAmount0);
-            uint256 recentlyBurned1 = collect1.add(unusedAmount1);
         }
     }
 
@@ -362,10 +355,6 @@ contract V3Aggregator is
             deployedAmount1 = deployedAmount1.add(amount1);
         }
 
-        console.log("deployed amounts after swap");
-        console.log(amount0);
-        console.log(amount1);
-
         // return total deployed amounts
         amount0 = deployedAmount0;
         amount1 = deployedAmount1;
@@ -385,20 +374,12 @@ contract V3Aggregator is
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage newStrategy = strategies[_strategy];
 
-        console.log("burned amount");
-        console.log(_amount0);
-        console.log(_amount1);
-
         if (strategy.swapAmount() > 0) {
             uint256 amountOut;
 
             (amount0, amount1, amountOut) = swapAndRedeploy(_strategy);
 
-            console.log("total deployed");
-            console.log(amount0);
-            console.log(amount1);
-
-            // get unused amounts
+            // calculate unused amounts
             if (strategy.zeroToOne()) {
                 // if deployed amount0 is greater than burned amount0
                 // substract swap amount from burned amount0
@@ -430,9 +411,6 @@ contract V3Aggregator is
                 }
             }
 
-            console.log("unused");
-            console.log(amount0);
-            console.log(amount1);
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
         } else {
@@ -464,19 +442,11 @@ contract V3Aggregator is
                 // update total amounts
                 totalAmount0 = totalAmount0.add(amount0);
                 totalAmount1 = totalAmount1.add(amount1);
-
-                console.log("total deployed");
-                console.log(amount0);
-                console.log(amount1);
             }
 
             // to calculate unused amount substract the deployed amounts from original amounts
             amount0 = _amount0.sub(totalAmount0);
             amount1 = _amount1.sub(totalAmount1);
-
-            console.log("unused amounts");
-            console.log(amount0);
-            console.log(amount1);
 
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);

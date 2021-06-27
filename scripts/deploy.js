@@ -6,6 +6,10 @@ const hre = require("hardhat");
 bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 });
 
 async function main() {
+
+  const userA = "0x08DcE649f86AF45dA8648FaD31D1C33A617C52d1"
+  const userB = "0xa4f7269C56974322C35A092bcB9897C642B57298"
+
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
   const factoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 
@@ -37,6 +41,13 @@ async function main() {
     "100000000000000000000000000000",
     owner
   );
+
+
+  await dai.transfer(userA, "1000000000000000000000000000")
+  await eth.transfer(userA, "1000000000000000000000000000")
+
+  await dai.transfer(userB, "1000000000000000000000000000")
+  await eth.transfer(userB, "1000000000000000000000000000")
 
   // create a pool
   await factory.createPool(dai.address, eth.address, 3000);

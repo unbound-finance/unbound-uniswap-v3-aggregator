@@ -17,11 +17,11 @@ let tickUpper;
 async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
   const config = {
-    dai: '0x10DAF88Aef79FD82369A5f5c158FfC093a58021a',
-    eth: '0xF77c21C32b03550EdcB3e1c92760544888094c5C',
-    pool: '0xF2fA4A3915Bd00de50F1d250CD6CA578C4204cd6',
-    strategy: '0xC9536BcC7AE571bDBCBcF6AB6eEF13D4153656C5',
-    v3Aggregator: '0xBD15C17260C0D1b4a4e7b73F67A5871Be62A3AbC'
+    dai: '0x5465Cf25C5E0aEe5Ee98deFc7De935fFD71A059C',
+    eth: '0x21BC00b1DA0A3a1627F44a335209F26245BCd455',
+    pool: '0xeDeAa577122B86c969445E7dEAc013e81d0537bB',
+    strategy: '0x20fe273F0699B0A6e263714C357A2DBF704dcd2f',
+    v3Aggregator: '0xA4F47d2391b3E2320270181E7903876A82880d4E'
   };
 
   const _strategy = config.strategy;
@@ -68,8 +68,8 @@ async function main() {
 async function addLiquidity(_strategy) {
   const tx = await aggregator.addLiquidity(
     _strategy,
-    "350000000000000000000000000",
-    "100000000000000000000000000000000",
+    "3500000000000000000000000",
+    "1000000000000000000000000000000",
     "0",
     "0",
     "0"
