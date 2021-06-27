@@ -10,7 +10,8 @@ import "hardhat/console.sol";
 contract StrategyFactory {
     address public immutable aggregator;
 
-    mapping(uint256 => address) public strategies;
+    mapping(uint256 => address) public strategiesByIndex;
+    mapping(address => bool) public strategies;
 
     uint256 total;
 
@@ -28,7 +29,7 @@ contract StrategyFactory {
         returns (address strategy)
     {
         strategy = address(new UnboundStrategy(aggregator, _pool, _operator));
-        strategies[total] = strategy;
+        strategiesByIndex[total] = strategy;
         total++;
     }
 }

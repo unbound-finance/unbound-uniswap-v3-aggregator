@@ -39,6 +39,8 @@ contract AggregatorManagement is AggregatorBase {
         uint256 amount
     );
 
+    // TODO: Hardcode Fees
+
     mapping(address => mapping(address => uint256)) public shares;
 
     // mapping of strategies with their total share
@@ -105,6 +107,7 @@ contract AggregatorManagement is AggregatorBase {
      */
     function getUnusedAmounts(address _strategy)
         internal
+        view
         returns (uint256 amount0, uint256 amount1)
     {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
@@ -154,19 +157,21 @@ contract AggregatorManagement is AggregatorBase {
             share = Math.max(_amount0, _amount1);
         } else {
             share = uint256(_liquidityAfter)
-                .sub(uint256(_liquidityBefore))
-                .mul(totalShares[_strategy])
-                .div(uint256(_liquidityBefore));
+            .sub(uint256(_liquidityBefore))
+            .mul(totalShares[_strategy])
+            .div(uint256(_liquidityBefore));
         }
 
-        console.log("strategy fee", strategy.fee());
+        // console.log("strategy fee", strategy.fee());
+        // console.log("feeTo", strategy.feeTo());
 
-        // // strategy owner fees
-        // if (uint256(strategy.fee()) > 0) {
-        //     uint256 managerShare = share.mul(strategy.fee()).div(1e6);
-        //     mintShare(_strategy, managerShare, strategy.feeTo());
-        //     share = share.sub(managerShare);
-        // }
+        // strategy owner fees
+        if (strategy.feeTo() != address(0) && strategy.managementFee() > 0) {
+            uint256 managerShare = share.mul(strategy.managementFee()).div(1e6);
+            mintShare(_strategy, managerShare, strategy.feeTo());
+            console.log("manager share", managerShare);
+            share = share.sub(managerShare);
+        }
 
         if (feeTo != address(0)) {
             uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
@@ -190,7 +195,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _shares,
         address _user
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         shares[_strategy][_user] = shares[_strategy][_user].sub(_shares);
         // update total shares
         totalShares[_strategy] = totalShares[_strategy].sub(_shares);
@@ -210,44 +215,50 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount0,
         uint256 _amount1
     ) internal {
-        Strategy storage localStrategyData = strategies[_strategy];
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-
-        if (localStrategyData.ticks.length == 0) {
+        Strategy storage strategySnapshot = strategies[_strategy];
+        if (strategySnapshot.ticks.length == 0) {
             updateUsedAmounts(_strategy, _tickId, _amount0, _amount1);
         } else {
             updateUsedAmounts(
                 _strategy,
                 _tickId,
-                localStrategyData.ticks[_tickId].amount0.add(_amount0),
-                localStrategyData.ticks[_tickId].amount1.add(_amount1)
+                strategySnapshot.ticks[_tickId].amount0.add(_amount0),
+                strategySnapshot.ticks[_tickId].amount1.add(_amount1)
             );
         }
     }
 
+    /**
+     * @dev Updates used amounts
+     * @param _strategy Address of the strategy
+     * @param _tickId Index of the tick to update
+     * @param _amount0 Amount of token0
+     * @param _amount1 Amount of token1
+     */
     function updateUsedAmounts(
         address _strategy,
         uint256 _tickId,
         uint256 _amount0,
         uint256 _amount1
     ) internal {
-        Strategy storage localStrategyData = strategies[_strategy];
+        Strategy storage strategySnapshot = strategies[_strategy];
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
 
-        uint256 oldLength = localStrategyData.ticks.length;
-
-        if (localStrategyData.ticks.length == 0) {
+        if (strategySnapshot.ticks.length == 0) {
             // initiate an ticks array and push new tick data to it
-            IUnboundStrategy.Tick memory newTick;
-            newTick.tickLower = strategy.ticks(_tickId).tickLower;
-            newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
-            newTick.amount0 = _amount0;
-            newTick.amount1 = _amount1;
-            localStrategyData.ticks.push(newTick);
+            strategySnapshot.ticks.push(
+                IUnboundStrategy.Tick(
+                    _amount0,
+                    _amount1,
+                    strategy.ticks(_tickId).tickLower,
+                    strategy.ticks(_tickId).tickUpper
+                )
+            );
         } else {
             // updated specific tick data
-            IUnboundStrategy.Tick storage newTick =
-                localStrategyData.ticks[_tickId];
+            IUnboundStrategy.Tick storage newTick = strategySnapshot.ticks[
+                _tickId
+            ];
             newTick.tickLower = strategy.ticks(_tickId).tickLower;
             newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
             newTick.amount0 = _amount0;
@@ -268,14 +279,12 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount0,
         uint256 _amount1
     ) internal {
-        Strategy storage localStrategyData = strategies[_strategy];
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-
+        Strategy storage strategySnapshot = strategies[_strategy];
         updateUsedAmounts(
             _strategy,
             _tickId,
-            localStrategyData.ticks[_tickId].amount0.sub(_amount0),
-            localStrategyData.ticks[_tickId].amount1.sub(_amount1)
+            strategySnapshot.ticks[_tickId].amount0.sub(_amount0),
+            strategySnapshot.ticks[_tickId].amount1.sub(_amount1)
         );
     }
 }

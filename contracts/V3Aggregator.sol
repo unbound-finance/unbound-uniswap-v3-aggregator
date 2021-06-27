@@ -8,7 +8,7 @@ import "./base/AggregatorBase.sol";
 import "./base/AggregatorManagement.sol";
 import "./base/UniswapPoolActions.sol";
 
-// import Unbound interfaces
+// import DefiEdge interfaces
 import "./interfaces/IUnboundStrategy.sol";
 import "./Strategy.sol";
 
@@ -44,14 +44,7 @@ contract V3Aggregator is
         uint256 amount1
     );
 
-    event Rebalance(
-        address indexed strategy,
-        address indexed caller,
-        uint256 amount0,
-        uint256 amount1,
-        int24 tickLower,
-        int24 tickUpper
-    );
+    event Rebalance(address indexed strategy, IUnboundStrategy.Tick[] ticks);
 
     // TODO: Remove this later, only for testing on Kovan
     uint256 public recentlyBurned0;
@@ -91,19 +84,16 @@ contract V3Aggregator is
 
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-        Strategy storage oldStrategy = strategies[_strategy];
-
         // require(strategy.initialized(), "not initilized");
 
         // get total number of assets under management
         // (amount0, amount1) = getAUM(_strategy);
 
         // get liquidity before adding the new liqudiity
-        uint128 liquidityBefore =
-            getCurrentLiquidityWithFees(
-                address(pool),
-                _strategy
-            );
+        uint128 liquidityBefore = getCurrentLiquidityWithFees(
+            address(pool),
+            _strategy
+        );
 
         // index 0 will always be an primary tick
         (amount0, amount1) = mintLiquidity(
@@ -116,8 +106,10 @@ contract V3Aggregator is
         );
 
         // get liquidity value after adding liquidity of the user
-        uint128 liquidityAfter =
-            LiquidityHelper.getCurrentLiquidity(address(pool), _strategy);
+        uint128 liquidityAfter = LiquidityHelper.getCurrentLiquidity(
+            address(pool),
+            _strategy
+        );
 
         // issue share based on the liquidity added
         share = issueShare(
@@ -162,14 +154,14 @@ contract V3Aggregator is
             shares[_strategy][msg.sender] >= _shares,
             "insufficient shares"
         );
-        Strategy storage oldStrategy = strategies[_strategy];
+        Strategy storage strategySnapshot = strategies[_strategy];
 
         uint256 collect0;
         uint256 collect1;
 
-        if (oldStrategy.ticks.length != 0) {
-            for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
-                IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
+        if (strategySnapshot.ticks.length != 0) {
+            for (uint256 i = 0; i < strategySnapshot.ticks.length; i++) {
+                IUnboundStrategy.Tick memory tick = strategySnapshot.ticks[i];
 
                 amount0 = tick.amount0.mul(_shares).div(totalShares[_strategy]);
                 amount1 = tick.amount1.mul(_shares).div(totalShares[_strategy]);
@@ -243,8 +235,7 @@ contract V3Aggregator is
         returns (uint256 amount0, uint256 amount1)
     {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-        Strategy storage oldStrategy = strategies[_strategy];
+        Strategy storage strategySnapshot = strategies[_strategy];
 
         // add blacklisting check
         // TODO: Remove this check
@@ -261,26 +252,28 @@ contract V3Aggregator is
             increaseUnusedAmounts(_strategy, amount0, amount1);
 
             // tell contract that funds are on hold
-            oldStrategy.hold = true;
+            strategySnapshot.hold = true;
 
             // delete the old ticks data
-            delete oldStrategy.ticks;
-        } else if (oldStrategy.hold) {
+            delete strategySnapshot.ticks;
+        } else if (strategySnapshot.hold) {
             // if hold has been enabled in previous update, deploy the hold
             // amount in the current ranges
             (amount0, amount1) = getUnusedAmounts(_strategy);
 
-            oldStrategy.hold = strategy.hold();
+            strategySnapshot.hold = strategy.hold();
 
             // redploy the liquidity
             redeploy(_strategy, amount0, amount1);
         } else {
-            (uint256 unusedAmount0, uint256 unusedAmount1) =
-                getUnusedAmounts(_strategy);
+            (uint256 unusedAmount0, uint256 unusedAmount1) = getUnusedAmounts(
+                _strategy
+            );
 
             // remove all the liquidity
-            (uint256 collect0, uint256 collect1, ) =
-                burnAllLiquidity(_strategy);
+            (uint256 collect0, uint256 collect1, ) = burnAllLiquidity(
+                _strategy
+            );
 
             // redploy the liquidity
             redeploy(
@@ -288,6 +281,9 @@ contract V3Aggregator is
                 collect0.add(unusedAmount0),
                 collect1.add(unusedAmount1)
             );
+
+            // emit rebalance event
+            emit Rebalance(_strategy, strategySnapshot.ticks);
         }
     }
 
@@ -301,18 +297,23 @@ contract V3Aggregator is
     {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-        Strategy storage newStrategy = strategies[_strategy];
+        Strategy storage strategySnapshot = strategies[_strategy];
 
         // get total assets under management of the strategy
         (uint256 totalAmount0, uint256 totalAmount1) = getAUM(_strategy);
 
         // check that swap amount should not exceed amounts managed
-        // TODO: Rethink about this check
-        // if (strategy.zeroToOne()) {
-        //     require(strategy.swapAmount() <= totalAmount0, "swap amounts exceed");
-        // } else {
-        //     require(strategy.swapAmount() <= totalAmount1, "swap amounts exceed");
-        // }
+        if (strategy.zeroToOne()) {
+            require(
+                strategy.swapAmount() <= totalAmount0,
+                "swap amounts exceed"
+            );
+        } else {
+            require(
+                strategy.swapAmount() <= totalAmount1,
+                "swap amounts exceed"
+            );
+        }
 
         // swap tokens
         (amountOut) = swap(
@@ -327,7 +328,7 @@ contract V3Aggregator is
         uint256 deployedAmount1;
 
         // delete old tick data
-        delete newStrategy.ticks;
+        delete strategySnapshot.ticks;
 
         for (uint256 i = 0; i < strategy.tickLength(); i++) {
             IUnboundStrategy.Tick memory tick = strategy.ticks(i);
@@ -343,12 +344,14 @@ contract V3Aggregator is
             );
 
             // push new tick to the ticks array
-            IUnboundStrategy.Tick memory newTick;
-            newTick.tickLower = tick.tickLower;
-            newTick.tickUpper = tick.tickUpper;
-            newTick.amount0 = amount0;
-            newTick.amount1 = amount1;
-            newStrategy.ticks.push(newTick);
+            strategySnapshot.ticks.push(
+                IUnboundStrategy.Tick(
+                    amount0,
+                    amount1,
+                    tick.tickLower,
+                    tick.tickUpper
+                )
+            );
 
             // add to the amounts outside the loop
             deployedAmount0 = deployedAmount0.add(amount0);
@@ -372,7 +375,7 @@ contract V3Aggregator is
     ) internal returns (uint256 amount0, uint256 amount1) {
         IUnboundStrategy strategy = IUnboundStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-        Strategy storage newStrategy = strategies[_strategy];
+        Strategy storage strategySnapshot = strategies[_strategy];
 
         if (strategy.swapAmount() > 0) {
             uint256 amountOut;
@@ -417,7 +420,7 @@ contract V3Aggregator is
             uint256 totalAmount0;
             uint256 totalAmount1;
 
-            delete newStrategy.ticks;
+            delete strategySnapshot.ticks;
 
             for (uint256 i = 0; i < strategy.tickLength(); i++) {
                 IUnboundStrategy.Tick memory tick = strategy.ticks(i);
@@ -431,13 +434,14 @@ contract V3Aggregator is
                     address(this)
                 );
 
-                // TODO: Move to different file later
-                IUnboundStrategy.Tick memory newTick;
-                newTick.tickLower = tick.tickLower;
-                newTick.tickUpper = tick.tickUpper;
-                newTick.amount0 = amount0;
-                newTick.amount1 = amount1;
-                newStrategy.ticks.push(newTick);
+                strategySnapshot.ticks.push(
+                    IUnboundStrategy.Tick(
+                        amount0,
+                        amount1,
+                        tick.tickLower,
+                        tick.tickUpper
+                    )
+                );
 
                 // update total amounts
                 totalAmount0 = totalAmount0.add(amount0);
@@ -451,18 +455,12 @@ contract V3Aggregator is
             // update unused amounts
             updateUnusedAmounts(_strategy, amount0, amount1);
         }
-
-        // // emit event
-        // emit Rebalance(
-        //     _strategy,
-        //     msg.sender,
-        //     amount0,
-        //     amount1,
-        //     strategy.tickLower(),
-        //     strategy.tickUpper()
-        // );
     }
 
+    /**
+     * @notice Gets current ticks and it's amounts
+     * @param _strategy Address of the strategy
+     */
     function getTicks(address _strategy)
         public
         view

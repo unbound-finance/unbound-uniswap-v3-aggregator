@@ -74,26 +74,6 @@ library LiquidityHelper {
         );
     }
 
-    // TODO: Remove this function
-    function getAmountsForLiquidityTest(
-        address _pool,
-        uint160 _sqrtRatioX96,
-        int24 _tickLower,
-        int24 _tickUpper,
-        uint128 _liquidity
-    ) external view returns (uint256 amount0, uint256 amount1) {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-
-        // get sqrtRatios required to calculate liquidity
-
-        // calculate liquidity needs to be added
-        (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
-            _sqrtRatioX96,
-            TickMath.getSqrtRatioAtTick(_tickLower),
-            TickMath.getSqrtRatioAtTick(_tickUpper),
-            _liquidity
-        );
-    }
 
     /**
      * @dev Get the liquidity between current ticks

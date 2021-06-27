@@ -17,11 +17,11 @@ let tickUpper;
 async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
   const config = {
-    dai: '0x5465Cf25C5E0aEe5Ee98deFc7De935fFD71A059C',
-    eth: '0x21BC00b1DA0A3a1627F44a335209F26245BCd455',
-    pool: '0xeDeAa577122B86c969445E7dEAc013e81d0537bB',
-    strategy: '0x20fe273F0699B0A6e263714C357A2DBF704dcd2f',
-    v3Aggregator: '0xA4F47d2391b3E2320270181E7903876A82880d4E'
+    dai: '0xb02ed89Ce41B1fE8a6692060Fa630EE7AF9719e1',
+    eth: '0xFfC6339A7C2B511dFbB2b153B7dF96c6B55Dc7C5',
+    pool: '0x3514a95e09d3b86b695354dC30FCA8D6E4c6c8B8',
+    strategy: '0x6Dd60121B025daFda354dc1478477e15413d264F',
+    v3Aggregator: '0x2d26fEA45ea6c5A6318CAC42a00a868a6045f51c'
   };
 
   const _strategy = config.strategy;

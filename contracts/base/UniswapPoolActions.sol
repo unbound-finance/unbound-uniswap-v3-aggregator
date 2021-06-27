@@ -13,7 +13,7 @@ import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 // import libraries
 import "../libraries/LiquidityHelper.sol";
 
-// import Unbound interfaces
+// import DefiEdge interfaces
 import "../interfaces/IUnboundStrategy.sol";
 
 import "../base/AggregatorManagement.sol";

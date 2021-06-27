@@ -266,6 +266,7 @@ describe("🟢 🟢 Rebalance using Multiple Ranges", () => {
 
   it("adds liquidity after rebalance", async () => {
     const oldTicksData = await aggregator.getTicks(strategy1.address);
+
     await aggregator.addLiquidity(
       strategy1.address,
       "1000000000000000000",
@@ -274,6 +275,7 @@ describe("🟢 🟢 Rebalance using Multiple Ranges", () => {
       0,
       0
     );
+
     const newTicksData = await aggregator.getTicks(strategy1.address);
 
     expect(parseInt("830921251876009000")).to.equal(
@@ -336,44 +338,44 @@ describe("🤯 Swap With Rebalance", () => {
   it("updates the used amounts correctly", async () => {});
 });
 
-describe("🐛 Bug", () => {
-  it("consoles sqrt prices", async () => {
-    const liquidityHelper = await LiquidityHelper.deploy();
+// describe("🐛 Bug", () => {
+//   it("consoles sqrt prices", async () => {
+//     const liquidityHelper = await LiquidityHelper.deploy();
 
-    const ticks = [
-      {
-        position: { liquidity: '59149315408003957658080' },
-        tickLower: 75960,
-        tickUpper: 80040,
-        amount0: '0',
-        amount1: '597000512740656199999958'
-      },
-      {
-        position: { liquidity: '22590063369273683733806' },
-        tickLower: 80700,
-        tickUpper: 82380,
-        amount0: '14435334389111013793',
-        amount1: '59392228757136813999998'
-      }
-    ];
+//     const ticks = [
+//       {
+//         position: { liquidity: '59149315408003957658080' },
+//         tickLower: 75960,
+//         tickUpper: 80040,
+//         amount0: '0',
+//         amount1: '597000512740656199999958'
+//       },
+//       {
+//         position: { liquidity: '22590063369273683733806' },
+//         tickLower: 80700,
+//         tickUpper: 82380,
+//         amount0: '14435334389111013793',
+//         amount1: '59392228757136813999998'
+//       }
+//     ];
 
-    for (tick in ticks) {
-      const amountsFromLiquidity =
-        await liquidityHelper.getAmountsForLiquidityTest(
-          pool.address,
-          "4687189220205140070798390409657",
-          ticks[tick].tickLower,
-          ticks[tick].tickUpper,
-          ticks[tick].position.liquidity
-        );
+//     for (tick in ticks) {
+//       const amountsFromLiquidity =
+//         await liquidityHelper.getAmountsForLiquidityTest(
+//           pool.address,
+//           "4687189220205140070798390409657",
+//           ticks[tick].tickLower,
+//           ticks[tick].tickUpper,
+//           ticks[tick].position.liquidity
+//         );
 
-      console.log({
-        amount0: amountsFromLiquidity.amount0.toString(),
-        amount1: amountsFromLiquidity.amount1.toString(),
-      });
-    }
-  });
-});
+//       console.log({
+//         amount0: amountsFromLiquidity.amount0.toString(),
+//         amount1: amountsFromLiquidity.amount1.toString(),
+//       });
+//     }
+//   });
+// });
 
 describe("✋  Hold Funds", () => {
   beforeEach("Add liquidity and swap amount", async () => {

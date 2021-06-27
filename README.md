@@ -1,4 +1,4 @@
-# Unbound's Uniswap V3 Liquidity Aggregation Contract
+# DefiEdge's Uniswap V3 Liquidity Aggregation Contract
 
 Aggregator contract is responsible for holding the liquidity and rebalancing it to get maximum yeilds from Uniswap V3. Users can pick the strategy of their choice and add liquidity. The strategy owner manages the liquidity of the users,in return the strategy owner can charge fee.
 

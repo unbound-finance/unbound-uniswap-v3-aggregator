@@ -23,15 +23,16 @@ contract UnboundStrategy {
 
     address public immutable pool;
 
-    uint256 public fee;
+    uint256 public managementFee = 0;
     address public feeTo;
 
     bool public initialized;
 
     bool public hold;
 
-    address operator;
-    address aggregator;
+    address public operator;
+    address pendingOperator;
+    address public aggregator;
 
     uint256 public swapAmount;
     uint160 public allowedSlippage;
@@ -61,7 +62,7 @@ contract UnboundStrategy {
         aggregator = _aggregator;
         pool = _pool;
         operator = _operator;
-        fee = 0;
+        managementFee = 0;
     }
 
     // Modifiers
@@ -86,6 +87,7 @@ contract UnboundStrategy {
      * @param _ticks New ticks
      */
     function changeTicks(Tick[] memory _ticks) internal {
+        // deletes ticks array
         delete ticks;
 
         // TODO: Add a check that two tick upper and tick lowers are not  in array cannot be same
@@ -94,16 +96,13 @@ contract UnboundStrategy {
         //     IAggregator(aggregator).getAUM(address(this));
 
         for (uint256 i = 0; i < _ticks.length; i++) {
-            Tick storage tick;
-            tick.amount0 = _ticks[i].amount0;
-            tick.amount1 = _ticks[i].amount1;
-            tick.tickLower = _ticks[i].tickLower;
-            tick.tickUpper = _ticks[i].tickUpper;
-            ticks.push(tick);
-            totalAmount0 = totalAmount0.add(_ticks[i].amount0);
-            totalAmount1 = totalAmount1.add(_ticks[i].amount1);
+            ticks.push(Tick(
+                _ticks[i].amount0,
+                _ticks[i].amount1,
+                _ticks[i].tickLower,
+                _ticks[i].tickUpper
+            ));
         }
-
         // require(
         //     totalAmount0 <= allowedAmount0 && totalAmount1 <= allowedAmount1,
         //     "total amounts exceed"
@@ -181,7 +180,7 @@ contract UnboundStrategy {
      * @param _newFee New fee
      */
     function changeFee(uint256 _newFee) public onlyOperator {
-        fee = _newFee;
+        managementFee = _newFee;
     }
 
     /**
@@ -190,6 +189,18 @@ contract UnboundStrategy {
      */
     function changeFeeTo(address _newFeeTo) external onlyOperator {
         feeTo = _newFeeTo;
+    }
+
+    // change operator
+    function changeOperator(address _operator) external onlyOperator {
+        require(_operator != address(0), "invalid operator");
+        pendingOperator = _operator;
+    }
+
+    // accept operator
+    function acceptOperator(address _operator) external {
+        require(_operator == pendingOperator, "invalid match");
+        operator = _operator;
     }
 
     function tickLength() public view returns (uint256 length) {
