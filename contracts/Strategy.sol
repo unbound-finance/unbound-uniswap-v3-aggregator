@@ -35,7 +35,7 @@ contract DefiEdgeStrategy {
     address public aggregator;
 
     uint256 public swapAmount;
-    uint160 public allowedSlippage;
+    uint160 public sqrtPriceLimitX96;
     bool public zeroToOne;
 
     uint256 public allowedPriceSlippage;
@@ -66,7 +66,6 @@ contract DefiEdgeStrategy {
         address _operator
     ) {
         aggregator = _aggregator;
-        console.log(_pool);
         pool = _pool;
         operator = _operator;
         managementFee = 0;
@@ -145,7 +144,7 @@ contract DefiEdgeStrategy {
     ) external onlyOperator whenInitialized {
         zeroToOne = _zeroToOne;
         swapAmount = _swapAmount;
-        allowedSlippage = _allowedSlippage;
+        sqrtPriceLimitX96 = _allowedSlippage;
         allowedPriceSlippage = _allowedPriceSlippage;
         onHold = false;
         changeTicks(_ticks);
@@ -159,7 +158,7 @@ contract DefiEdgeStrategy {
         onHold = true;
         delete ticks;
         swapAmount = 0;
-        allowedSlippage = 0;
+        sqrtPriceLimitX96 = 0;
         allowedPriceSlippage = 0;
         IAggregator(aggregator).rebalance(address(this));
     }

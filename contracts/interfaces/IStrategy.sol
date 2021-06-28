@@ -27,7 +27,7 @@ interface IStrategy {
     function zeroToOne() external view returns (bool);
 
     /// allowed slippage for the swap
-    function allowedSlippage() external view returns (uint160);
+    function sqrtPriceLimitX96() external view returns (uint160);
 
     /// if enabled, the aggregator will hold the liquidity
     function onHold() external view returns (bool);

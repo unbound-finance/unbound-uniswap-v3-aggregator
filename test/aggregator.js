@@ -184,14 +184,14 @@
 //     );
 
 //     const swapAmt = ethers.BigNumber.from(100000000000000);
-//     const allowedSlippage = ethers.BigNumber.from(1000000);
+//     const sqrtPriceLimitX96 = ethers.BigNumber.from(1000000);
 //     const allowedPriceSlippage = ethers.BigNumber.from(1000000);
 //     const amount0 = ethers.BigNumber.from(toGwei(0.010156660656490624));
 //     const amount1 = ethers.BigNumber.from(toGwei(10));
 
 //     await strategy
 //       .connect(owner)
-//       .swapAndRebalance(swapAmt, allowedSlippage, allowedPriceSlippage, true, [
+//       .swapAndRebalance(swapAmt, sqrtPriceLimitX96, allowedPriceSlippage, true, [
 //         [amount0, amount1, secondaryTickLower, secondaryTickUpper],
 //       ]);
 

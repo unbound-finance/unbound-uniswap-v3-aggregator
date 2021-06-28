@@ -93,7 +93,6 @@ beforeEach(async () => {
 
   const _strategy1 = await strategyFactory.strategyByIndex(2);
 
-  console.log("_strategty1", _strategy1);
 
   strategy0 = await ethers.getContractAt("DefiEdgeStrategy", _strategy0);
 
@@ -115,7 +114,7 @@ beforeEach(async () => {
   await token1.approve(aggregator.address, approveAmt);
 
   // // adds 5000 token0 and 16580085.099454967 token1
-  console.log("strategy address from test script", strategy1.address);
+
   await aggregator
     .connect(owner)
     .addLiquidity(

@@ -36,12 +36,10 @@ contract StrategyFactory {
         external
         returns (address strategy)
     {
-        console.log("index before", total);
         strategy = address(new DefiEdgeStrategy(aggregator, _pool, _operator));
         isValid[strategy] = true;
         strategyByIndex[total + 1] = strategy;
         total += 1;
-        console.log("index after", total);
         emit NewStrategy(strategy, msg.sender);
     }
 }

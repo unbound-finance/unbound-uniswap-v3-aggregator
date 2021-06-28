@@ -77,8 +77,6 @@ contract Aggregator is
         IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
 
-        console.log("strategy address from contract", address(strategy));
-
         // require(strategy.initialized(), "not initilized");
         require(
             IStrategyFactory(factory).isValid(_strategy),
@@ -229,6 +227,9 @@ contract Aggregator is
         external
         returns (uint256 amount0, uint256 amount1)
     {
+        // check if rebalance is getting called from strategy contract or not
+        require(IStrategyFactory(factory).isValid(msg.sender));
+
         IStrategy strategy = IStrategy(_strategy);
         Strategy storage strategySnapshot = strategies[_strategy];
 
@@ -278,6 +279,10 @@ contract Aggregator is
         }
     }
 
+    /**
+     * @dev Swaps the input amount and redploys in the ticks
+     * @param _strategy Address of the strategy
+     */
     function swapAndRedeploy(address _strategy)
         internal
         returns (
@@ -312,7 +317,7 @@ contract Aggregator is
             _strategy,
             strategy.zeroToOne(),
             int256(strategy.swapAmount()),
-            strategy.allowedSlippage()
+            strategy.sqrtPriceLimitX96()
         );
 
         uint256 deployedAmount0;
@@ -420,6 +425,7 @@ contract Aggregator is
                     address(this)
                 );
 
+                // push new amounts and new ticks to the snapshot
                 strategySnapshot.ticks.push(
                     IStrategy.Tick(
                         amount0,
@@ -493,5 +499,40 @@ contract Aggregator is
             "already added"
         );
         factory = _factory;
+    }
+
+    // TODO: Remove this function once tested on mainnet
+    function emergencyBurn(
+        address _pool,
+        int24 _tickLower,
+        int24 _tickUpper
+    ) external onlyGovernance {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+        (uint128 currentLiquidity, , , , ) = pool.positions(
+            PositionKey.compute(address(this), _tickLower, _tickUpper)
+        );
+        pool.burn(_tickLower, _tickUpper, currentLiquidity);
+
+        // collect fees
+        pool.collect(
+            address(this),
+            _tickLower,
+            _tickUpper,
+            type(uint128).max,
+            type(uint128).max
+        );
+    }
+
+    // TODO: Remove this function once tested on mainnet
+    function emergencyWithdraw(
+        address _pool,
+        uint256 _amount0,
+        uint256 _amount1
+    ) external onlyGovernance {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+        // transfer the tokens back
+
+        TransferHelper.safeTransfer(pool.token0(), msg.sender, _amount0);
+        TransferHelper.safeTransfer(pool.token1(), msg.sender, _amount1);
     }
 }

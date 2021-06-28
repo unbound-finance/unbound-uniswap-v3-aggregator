@@ -395,12 +395,12 @@
 
 // //   // const zeroToOne = await newStrategy.zeroToOne();
 // //   // const swapAmount = await newStrategy.swapAmount();
-// //   // const allowedSlippage = await newStrategy.allowedSlippage();
+// //   // const sqrtPriceLimitX96 = await newStrategy.sqrtPriceLimitX96();
 
 // //   // console.log({
 // //   //   zeroToOne: zeroToOne.toString(),
 // //   //   swapAmount: swapAmount.toString(),
-// //   //   allowedSlippage: allowedSlippage.toString()
+// //   //   sqrtPriceLimitX96: sqrtPriceLimitX96.toString()
 // //   // })
 
 // //   // await newStrategy.changeTicks(newTick0, newTick1, 0, 0, 0);
