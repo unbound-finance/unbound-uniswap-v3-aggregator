@@ -93,7 +93,6 @@ beforeEach(async () => {
 
   const _strategy1 = await strategyFactory.strategyByIndex(2);
 
-
   strategy0 = await ethers.getContractAt("DefiEdgeStrategy", _strategy0);
 
   strategy1 = await ethers.getContractAt("DefiEdgeStrategy", _strategy1);
@@ -309,9 +308,14 @@ describe("🤯 Swap With Rebalance", () => {
 
     const unusedBefore = await aggregator.unused(strategy1.address);
 
+    console.log((await pool.slot0()).sqrtPriceX96);
+
+    const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
+    const sqrtPriceLimitX96 = sqrtRatioX96 - (sqrtRatioX96 * 10) / 100;
+
     await strategy1.rebalance(
       "2000000000000000000",
-      "1000000",
+      toGwei(sqrtPriceLimitX96 / 1e18),
       "1000000",
       true,
       [
@@ -398,10 +402,11 @@ describe("✋  Hold Funds", () => {
       );
 
     const unusedBefore = await aggregator.unused(strategy1.address);
-
+    const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
+    const sqrtPriceLimitX96 = sqrtRatioX96 - (sqrtRatioX96 * 10) / 100;
     await strategy1.rebalance(
       "2000000000000000000",
-      "1000000",
+      toGwei(sqrtPriceLimitX96 / 1e18),
       "1000000",
       true,
       [
@@ -429,9 +434,13 @@ describe("✋  Hold Funds", () => {
 
     const tickLowerX = calculateTick(2300, 60);
     const tickUpperX = calculateTick(3700, 60);
+
+    const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
+    const sqrtPriceLimitX96 = parseInt(sqrtRatioX96) + (parseInt(sqrtRatioX96) * 0.5);
+
     await strategy1.rebalance(
       toGwei(3900.6880796999767),
-      "1000000",
+      toGwei(sqrtPriceLimitX96 / 1e18),
       "1000000",
       false,
       [
@@ -444,23 +453,35 @@ describe("✋  Hold Funds", () => {
       ]
     );
 
-    await strategy1.rebalance(toGwei(0), "1000000", "1000000", false, [
-      [
-        toGwei(0.01296328671820293),
-        toGwei(33.278254018514),
-        calculateTick(2400, 60),
-        calculateTick(3800, 60),
-      ],
-    ]);
+    // await strategy1.rebalance(
+    //   toGwei(0),
+    //   toGwei(sqrtPriceLimitX96 / 1e18),
+    //   "1000000",
+    //   false,
+    //   [
+    //     [
+    //       toGwei(0.01296328671820293),
+    //       toGwei(33.278254018514),
+    //       calculateTick(2400, 60),
+    //       calculateTick(3800, 60),
+    //     ],
+    //   ]
+    // );
 
-    await strategy1.rebalance(toGwei(0), "1000000", "1000000", false, [
-      [
-        toGwei(9.296328671820293),
-        toGwei(33711.278254018514),
-        calculateTick(2500, 60),
-        calculateTick(4000, 60),
-      ],
-    ]);
+    // await strategy1.rebalance(
+    //   toGwei(0),
+    //   toGwei(sqrtPriceLimitX96 / 1e18),
+    //   "1000000",
+    //   false,
+    //   [
+    //     [
+    //       toGwei(9.296328671820293),
+    //       toGwei(33711.278254018514),
+    //       calculateTick(2500, 60),
+    //       calculateTick(4000, 60),
+    //     ],
+    //   ]
+    // );
   });
 });
 

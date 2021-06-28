@@ -132,19 +132,19 @@ contract DefiEdgeStrategy {
     /**
      * @notice Swaps and updates ticks for rebalancing
      * @param _swapAmount Amount to be swapped
-     * @param _allowedSlippage The allowed slippage in terms of percentage
+     * @param _sqrtPriceLimitX96 The allowed slippage in terms of percentage
      * @param _allowedPriceSlippage The allowed price movement after the swap
      */
     function rebalance(
         uint256 _swapAmount,
-        uint160 _allowedSlippage,
+        uint160 _sqrtPriceLimitX96,
         uint256 _allowedPriceSlippage,
         bool _zeroToOne,
         Tick[] memory _ticks
     ) external onlyOperator whenInitialized {
         zeroToOne = _zeroToOne;
         swapAmount = _swapAmount;
-        sqrtPriceLimitX96 = _allowedSlippage;
+        sqrtPriceLimitX96 = _sqrtPriceLimitX96;
         allowedPriceSlippage = _allowedPriceSlippage;
         onHold = false;
         changeTicks(_ticks);
@@ -191,6 +191,7 @@ contract DefiEdgeStrategy {
         operator = _operator;
     }
 
+    // get length of ticks array
     function tickLength() public view returns (uint256 length) {
         length = ticks.length;
     }

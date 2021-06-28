@@ -18,7 +18,6 @@ import "../interfaces/IStrategy.sol";
 
 import "../base/AggregatorManagement.sol";
 
-
 contract UniswapPoolActions is
     AggregatorManagement,
     IUniswapV3MintCallback,
@@ -65,14 +64,13 @@ contract UniswapPoolActions is
     ) internal returns (uint256 amount0, uint256 amount1) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
-        uint128 liquidity =
-            LiquidityHelper.getLiquidityForAmounts(
-                address(pool),
-                _tickLower,
-                _tickUpper,
-                _amount0,
-                _amount1
-            );
+        uint128 liquidity = LiquidityHelper.getLiquidityForAmounts(
+            address(pool),
+            _tickLower,
+            _tickUpper,
+            _amount0,
+            _amount1
+        );
 
         // set temparary variable for callback verification
         pool_ = _pool;
@@ -134,10 +132,9 @@ contract UniswapPoolActions is
             );
         }
 
-        (, , , uint128 tokensOwed0, uint128 tokensOwed1) =
-            pool.positions(
-                PositionKey.compute(address(this), _tickLower, _tickUpper)
-            );
+        (, , , uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(
+            PositionKey.compute(address(this), _tickLower, _tickUpper)
+        );
 
         // collect fees
         (collect0, collect1) = pool.collect(
@@ -176,15 +173,18 @@ contract UniswapPoolActions is
             IStrategy.Tick memory tick = strategySnapshot.ticks[i];
 
             // Burn liquidity for range order
-            (uint256 amount0, uint256 amount1, uint128 burnedLiquidity) =
-                burnLiquidity(
-                    address(pool),
-                    address(strategy),
-                    tick.tickLower,
-                    tick.tickUpper,
-                    tick.amount0,
-                    tick.amount1
-                );
+            (
+                uint256 amount0,
+                uint256 amount1,
+                uint128 burnedLiquidity
+            ) = burnLiquidity(
+                address(pool),
+                address(strategy),
+                tick.tickLower,
+                tick.tickUpper,
+                tick.amount0,
+                tick.amount1
+            );
 
             collect0 = collect0.add(amount0);
             collect1 = collect1.add(amount1);
@@ -198,31 +198,24 @@ contract UniswapPoolActions is
         address _strategy,
         bool _zeroToOne,
         int256 _amount,
-        uint160 _allowedSlippage
+        uint160 _sqrtPriceLimitX96
     ) internal returns (uint256 amountOut) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         IStrategy strategy = IStrategy(_strategy);
 
-        // TODO: Support partial slippage
-        uint160 sqrtPriceLimitX96 =
-            _zeroToOne
-                ? sqrtRatioX96 - (sqrtRatioX96 * _allowedSlippage) / 1e8
-                : sqrtRatioX96 + (sqrtRatioX96 * _allowedSlippage) / 1e8;
-
         (amountOut) = swapExactInput(
             _pool,
             _zeroToOne,
             _amount,
-            sqrtPriceLimitX96
+            _sqrtPriceLimitX96
         );
 
         (uint160 newSqrtRatioX96, , , , , , ) = pool.slot0();
 
-        uint160 difference =
-            sqrtRatioX96 < newSqrtRatioX96
-                ? sqrtRatioX96 / newSqrtRatioX96
-                : newSqrtRatioX96 / sqrtRatioX96;
+        uint160 difference = sqrtRatioX96 < newSqrtRatioX96
+            ? sqrtRatioX96 / newSqrtRatioX96
+            : newSqrtRatioX96 / sqrtRatioX96;
 
         if (strategy.allowedPriceSlippage() > 0) {
             // check price P slippage
@@ -243,16 +236,13 @@ contract UniswapPoolActions is
         // set temparary variable for callback verification
         pool_ = _pool;
 
-        (int256 amount0, int256 amount1) =
-            pool.swap(
-                address(this),
-                _zeroToOne,
-                _amount,
-                sqrtPriceLimitX96,
-                abi.encode(
-                    SwapCallbackData({pool: _pool, zeroToOne: _zeroToOne})
-                )
-            );
+        (int256 amount0, int256 amount1) = pool.swap(
+            address(this),
+            _zeroToOne,
+            _amount,
+            sqrtPriceLimitX96,
+            abi.encode(SwapCallbackData({pool: _pool, zeroToOne: _zeroToOne}))
+        );
 
         return uint256(-(_zeroToOne ? amount1 : amount0));
     }
@@ -359,14 +349,13 @@ contract UniswapPoolActions is
                 ,
                 uint128 tokensOwed0,
                 uint128 tokensOwed1
-            ) =
-                pool.positions(
-                    PositionKey.compute(
-                        address(this),
-                        tick.tickLower,
-                        tick.tickUpper
-                    )
-                );
+            ) = pool.positions(
+                PositionKey.compute(
+                    address(this),
+                    tick.tickLower,
+                    tick.tickUpper
+                )
+            );
 
             // convert collected fees in form of liquidity
             fees = LiquidityHelper.getLiquidityForAmounts(
