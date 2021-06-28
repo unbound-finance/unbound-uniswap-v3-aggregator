@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/math/Math.sol";
 
 import "./AggregatorBase.sol";
 
-import "../interfaces/IUnboundStrategy.sol";
+import "../interfaces/IStrategy.sol";
 
 // TODO: Remove
 import "hardhat/console.sol";
@@ -16,7 +16,7 @@ contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
     struct Strategy {
-        IUnboundStrategy.Tick[] ticks;
+        IStrategy.Tick[] ticks;
         bool hold;
     }
 
@@ -40,6 +40,7 @@ contract AggregatorManagement is AggregatorBase {
     );
 
     // TODO: Hardcode Fees
+
 
     mapping(address => mapping(address => uint256)) public shares;
 
@@ -151,7 +152,7 @@ contract AggregatorManagement is AggregatorBase {
         uint128 _liquidityAfter,
         address _user
     ) internal returns (uint256 share) {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
 
         if (totalShares[_strategy] == 0) {
             share = Math.max(_amount0, _amount1);
@@ -161,9 +162,6 @@ contract AggregatorManagement is AggregatorBase {
             .mul(totalShares[_strategy])
             .div(uint256(_liquidityBefore));
         }
-
-        // console.log("strategy fee", strategy.fee());
-        // console.log("feeTo", strategy.feeTo());
 
         // strategy owner fees
         if (strategy.feeTo() != address(0) && strategy.managementFee() > 0) {
@@ -242,12 +240,12 @@ contract AggregatorManagement is AggregatorBase {
         uint256 _amount1
     ) internal {
         Strategy storage strategySnapshot = strategies[_strategy];
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
 
         if (strategySnapshot.ticks.length == 0) {
             // initiate an ticks array and push new tick data to it
             strategySnapshot.ticks.push(
-                IUnboundStrategy.Tick(
+                IStrategy.Tick(
                     _amount0,
                     _amount1,
                     strategy.ticks(_tickId).tickLower,
@@ -256,9 +254,7 @@ contract AggregatorManagement is AggregatorBase {
             );
         } else {
             // updated specific tick data
-            IUnboundStrategy.Tick storage newTick = strategySnapshot.ticks[
-                _tickId
-            ];
+            IStrategy.Tick storage newTick = strategySnapshot.ticks[_tickId];
             newTick.tickLower = strategy.ticks(_tickId).tickLower;
             newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
             newTick.amount0 = _amount0;

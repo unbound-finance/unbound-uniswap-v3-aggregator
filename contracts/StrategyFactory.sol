@@ -4,16 +4,24 @@ pragma solidity >=0.7.6;
 pragma abicoder v2;
 
 import "./Strategy.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "hardhat/console.sol";
 
 contract StrategyFactory {
+    using SafeMath for uint256;
+
+    event NewStrategy(address indexed strategy, address indexed creater);
+
     address public immutable aggregator;
 
-    mapping(uint256 => address) public strategiesByIndex;
-    mapping(address => bool) public strategies;
+    // tracks strategies by Index
+    mapping(uint256 => address) public strategyByIndex;
 
-    uint256 total;
+    // check validity of the strategy
+    mapping(address => bool) public isValid;
+
+    uint256 public total;
 
     constructor(address _aggregator) {
         aggregator = _aggregator;
@@ -28,8 +36,12 @@ contract StrategyFactory {
         external
         returns (address strategy)
     {
-        strategy = address(new UnboundStrategy(aggregator, _pool, _operator));
-        strategiesByIndex[total] = strategy;
-        total++;
+        console.log("index before", total);
+        strategy = address(new DefiEdgeStrategy(aggregator, _pool, _operator));
+        isValid[strategy] = true;
+        strategyByIndex[total + 1] = strategy;
+        total += 1;
+        console.log("index after", total);
+        emit NewStrategy(strategy, msg.sender);
     }
 }

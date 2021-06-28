@@ -29,8 +29,8 @@ async function main() {
   const _token0 = config.dai;
   const _token1 = config.eth;
 
-  strategy = await ethers.getContractAt("UnboundStrategy", _strategy);
-  aggregator = await ethers.getContractAt("V3Aggregator", _aggregator);
+  strategy = await ethers.getContractAt("DefiEdgeStrategy", _strategy);
+  aggregator = await ethers.getContractAt("Aggregator", _aggregator);
   pool = await ethers.getContractAt("UniswapV3Pool", _pool);
 
   token0 = await ethers.getContractAt("ERC20", _token0);

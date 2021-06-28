@@ -14,8 +14,8 @@ async function main() {
   const factoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 
   const TestToken = await ethers.getContractFactory("ERC20");
-  const TestStrategy = await ethers.getContractFactory("UnboundStrategy");
-  const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
+  const TestStrategy = await ethers.getContractFactory("DefiEdgeStrategy");
+  const Aggregator = await ethers.getContractFactory("Aggregator");
 
   const factory = await ethers.getContractAt(
     "UniswapV3Factory",
@@ -91,7 +91,7 @@ async function main() {
   const governance = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
 
   // deploy aggregator contract
-  const v3Aggregator = await V3Aggregator.deploy(governance);
+  const v3Aggregator = await Aggregator.deploy(governance);
 
   console.log("✅ aggregator deployed")
 

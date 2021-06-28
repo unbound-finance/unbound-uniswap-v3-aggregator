@@ -20,8 +20,8 @@
 //   UniswapV3Factory = await ethers.getContractFactory("UniswapV3Factory");
 //   StrategyFactory = await ethers.getContractFactory("StrategyFactory");
 //   TestToken = await ethers.getContractFactory("ERC20");
-//   DefiEdgeStrategy = await ethers.getContractFactory("UnboundStrategy");
-//   Aggregator = await ethers.getContractFactory("V3Aggregator");
+//   DefiEdgeStrategy = await ethers.getContractFactory("DefiEdgeStrategy");
+//   Aggregator = await ethers.getContractFactory("Aggregator");
 // }
 
 // let token0;

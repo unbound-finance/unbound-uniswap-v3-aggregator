@@ -42,9 +42,9 @@
 
 //   const TestToken = await ethers.getContractFactory("ERC20");
 //   const TestStrategy = await ethers.getContractFactory("TestStrategy");
-//   const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
+//   const Aggregator = await ethers.getContractFactory("Aggregator");
 
-//   v3Aggregator = await V3Aggregator.deploy(owner.address);
+//   v3Aggregator = await Aggregator.deploy(owner.address);
 
 //   // deployments
 //   testToken0 = await TestToken.deploy(
@@ -152,7 +152,7 @@
 // // 2nd
 // // Simulate bolingers band on loop
 
-// describe("V3Aggregator", function () {
+// describe("Aggregator", function () {
 //   it("Should add right amount of successfully", async function () {
 //     // add liquidity using aggregator contract
 //     await v3Aggregator.addLiquidity(

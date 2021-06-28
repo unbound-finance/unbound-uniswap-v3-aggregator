@@ -2,7 +2,7 @@
 
 Aggregator contract is responsible for holding the liquidity and rebalancing it to get maximum yeilds from Uniswap V3. Users can pick the strategy of their choice and add liquidity. The strategy owner manages the liquidity of the users,in return the strategy owner can charge fee.
 
-A strategy can be deployed by using standard strategy interface as described in `/interfaces/IUnboundStrategy.sol`
+A strategy can be deployed by using standard strategy interface as described in `/interfaces/IStrategy.sol`
 
 As users deposits the liquidity, they get share representing their liquidity in the pool.
 

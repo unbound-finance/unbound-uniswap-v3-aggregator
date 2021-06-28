@@ -14,12 +14,10 @@ import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "../libraries/LiquidityHelper.sol";
 
 // import DefiEdge interfaces
-import "../interfaces/IUnboundStrategy.sol";
+import "../interfaces/IStrategy.sol";
 
 import "../base/AggregatorManagement.sol";
 
-// TODO:Remove
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract UniswapPoolActions is
     AggregatorManagement,
@@ -170,12 +168,12 @@ contract UniswapPoolActions is
             uint128 liquidity
         )
     {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage oldStrategy = strategies[_strategy];
 
         for (uint256 i = 0; i < oldStrategy.ticks.length; i++) {
-            IUnboundStrategy.Tick memory tick = oldStrategy.ticks[i];
+            IStrategy.Tick memory tick = oldStrategy.ticks[i];
 
             // Burn liquidity for range order
             (uint256 amount0, uint256 amount1, uint128 burnedLiquidity) =
@@ -204,7 +202,7 @@ contract UniswapPoolActions is
     ) internal returns (uint256 amountOut) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
 
         // TODO: Support partial slippage
         uint160 sqrtPriceLimitX96 =
@@ -350,11 +348,11 @@ contract UniswapPoolActions is
         internal
         returns (uint128 liquidity)
     {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         for (uint256 i = 0; i < strategy.tickLength(); i++) {
-            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+            IStrategy.Tick memory tick = strategy.ticks(i);
 
             uint128 fees;
 

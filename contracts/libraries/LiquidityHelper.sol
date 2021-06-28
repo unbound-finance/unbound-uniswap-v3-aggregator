@@ -6,7 +6,7 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "../interfaces/IUnboundStrategy.sol";
+import "../interfaces/IStrategy.sol";
 
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
@@ -85,11 +85,11 @@ library LiquidityHelper {
         view
         returns (uint128 liquidity)
     {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         for (uint256 i = 0; i < strategy.tickLength(); i++) {
-            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+            IStrategy.Tick memory tick = strategy.ticks(i);
 
             (uint128 currentLiquidity, , , , ) =
                 pool.positions(

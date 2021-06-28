@@ -41,8 +41,8 @@
 
 //   // create a pool
 //   const TestToken = await ethers.getContractFactory("ERC20");
-//   const TestStrategy = await ethers.getContractFactory("UnboundStrategy");
-//   const Aggregator = await ethers.getContractFactory("V3Aggregator");
+//   const TestStrategy = await ethers.getContractFactory("DefiEdgeStrategy");
+//   const Aggregator = await ethers.getContractFactory("Aggregator");
 
 //   aggregator = await Aggregator.deploy(owner.address);
 //   strategyFactory = await StrategyFactory.deploy(aggregator.address);
@@ -166,7 +166,7 @@
 //     await strategyFactory.createStrategy(pool.address, owner.address);
 
 //     const strategy0 = await ethers.getContractAt(
-//       "UnboundStrategy",
+//       "DefiEdgeStrategy",
 //       "0x553bed26a78b94862e53945941e4ad6e4f2497da"
 //     );
 

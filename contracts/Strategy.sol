@@ -18,7 +18,7 @@ interface IAggregator {
     function getAUM(address _strategy) external returns (uint256, uint256);
 }
 
-contract UnboundStrategy {
+contract DefiEdgeStrategy {
     using SafeMath for uint256;
 
     address public immutable pool;
@@ -28,7 +28,7 @@ contract UnboundStrategy {
 
     bool public initialized;
 
-    bool public hold;
+    bool public onHold;
 
     address public operator;
     address pendingOperator;
@@ -54,12 +54,19 @@ contract UnboundStrategy {
     uint256 totalAmount0;
     uint256 totalAmount1;
 
+    enum feeTier {
+        SMALL,
+        MEDIUM,
+        LARGE
+    }
+
     constructor(
         address _aggregator,
         address _pool,
         address _operator
     ) {
         aggregator = _aggregator;
+        console.log(_pool);
         pool = _pool;
         operator = _operator;
         managementFee = 0;
@@ -72,7 +79,7 @@ contract UnboundStrategy {
     }
 
     // Modifiers
-    modifier isInitialized() {
+    modifier whenInitialized() {
         require(initialized, "Ownable: strategy not initialized");
         _;
     }
@@ -90,18 +97,20 @@ contract UnboundStrategy {
         // deletes ticks array
         delete ticks;
 
-        // TODO: Add a check that two tick upper and tick lowers are not  in array cannot be same
+        // TODO: Add a check that two tick upper and tick lowers are not in array cannot be same
 
         // (uint256 allowedAmount0, uint256 allowedAmount1) =
         //     IAggregator(aggregator).getAUM(address(this));
 
         for (uint256 i = 0; i < _ticks.length; i++) {
-            ticks.push(Tick(
-                _ticks[i].amount0,
-                _ticks[i].amount1,
-                _ticks[i].tickLower,
-                _ticks[i].tickUpper
-            ));
+            ticks.push(
+                Tick(
+                    _ticks[i].amount0,
+                    _ticks[i].amount1,
+                    _ticks[i].tickLower,
+                    _ticks[i].tickUpper
+                )
+            );
         }
         // require(
         //     totalAmount0 <= allowedAmount0 && totalAmount1 <= allowedAmount1,
@@ -115,27 +124,10 @@ contract UnboundStrategy {
      */
     function initialize(Tick[] memory _ticks) external onlyOperator {
         require(!initialized, "strategy already initialised");
+        initialized = true;
         for (uint256 i = 0; i < _ticks.length; i++) {
-            Tick storage tick;
-            tick.amount0 = 0;
-            tick.amount1 = 0;
-            tick.tickLower = _ticks[i].tickLower;
-            tick.tickUpper = _ticks[i].tickUpper;
-            ticks.push(tick);
+            ticks.push(Tick(0, 0, _ticks[i].tickLower, _ticks[i].tickUpper));
         }
-    }
-
-    /**
-     * @notice Changes ticks and rebalances
-     * @param _ticks New ticks in the array
-     */
-    function changeTicksAndRebalance(Tick[] memory _ticks) external {
-        // TODO: Make sure we check the maximum added amounts from aggregator, only allow to add amounts the strtategy is holding in aggregator
-        require(ticks.length <= 5, "invalid number of ticks");
-        changeTicks(_ticks);
-        swapAmount = 0;
-        hold = false;
-        IAggregator(aggregator).rebalance(address(this));
     }
 
     /**
@@ -144,30 +136,27 @@ contract UnboundStrategy {
      * @param _allowedSlippage The allowed slippage in terms of percentage
      * @param _allowedPriceSlippage The allowed price movement after the swap
      */
-    function swapAndRebalance(
+    function rebalance(
         uint256 _swapAmount,
         uint160 _allowedSlippage,
         uint256 _allowedPriceSlippage,
         bool _zeroToOne,
         Tick[] memory _ticks
-    ) external {
-        // console.log("swap and rebalance");
-        // console.log(msg.sender);
-        // console.log(operator);
-        // require(msg.sender == operator, "not manager");
-        // require(initialized, "Ownable: strategy not initialized");
-
+    ) external onlyOperator whenInitialized {
         zeroToOne = _zeroToOne;
         swapAmount = _swapAmount;
         allowedSlippage = _allowedSlippage;
         allowedPriceSlippage = _allowedPriceSlippage;
-        hold = false;
+        onHold = false;
         changeTicks(_ticks);
         IAggregator(aggregator).rebalance(address(this));
     }
 
-    function holdFunds() external {
-        hold = true;
+    /**
+     * @notice Holds the funds
+     */
+    function hold() external onlyOperator whenInitialized {
+        onHold = true;
         delete ticks;
         swapAmount = 0;
         allowedSlippage = 0;

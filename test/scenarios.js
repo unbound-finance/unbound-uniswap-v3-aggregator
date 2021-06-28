@@ -57,7 +57,7 @@
 
 //   const TestToken = await ethers.getContractFactory("ERC20");
 //   TestStrategy = await ethers.getContractFactory("TestStrategy");
-//   const Aggregator = await ethers.getContractFactory("V3Aggregator");
+//   const Aggregator = await ethers.getContractFactory("Aggregator");
 
 //   aggregator = await Aggregator.deploy(owner.address);
 

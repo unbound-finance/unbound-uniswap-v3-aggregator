@@ -26,8 +26,8 @@ async function loadContracts() {
   UniswapV3Factory = await ethers.getContractFactory("UniswapV3Factory");
   StrategyFactory = await ethers.getContractFactory("StrategyFactory");
   TestToken = await ethers.getContractFactory("ERC20");
-  DefiEdgeStrategy = await ethers.getContractFactory("UnboundStrategy");
-  Aggregator = await ethers.getContractFactory("V3Aggregator");
+  DefiEdgeStrategy = await ethers.getContractFactory("DefiEdgeStrategy");
+  Aggregator = await ethers.getContractFactory("Aggregator");
   LiquidityHelper = await ethers.getContractFactory("LiquidityHelper");
 }
 
@@ -81,17 +81,23 @@ beforeEach(async () => {
 
   // add some liquidity in the pool
   // deploy strategy contract
-  strategy0 = await DefiEdgeStrategy.deploy(
-    aggregator.address,
-    pool.address,
-    owner.address
-  );
 
-  strategy1 = await DefiEdgeStrategy.deploy(
-    aggregator.address,
-    pool.address,
-    owner.address
-  );
+  const strategyFactory = await StrategyFactory.deploy(aggregator.address);
+  await aggregator.addFactory(strategyFactory.address);
+
+  await strategyFactory.createStrategy(pool.address, owner.address);
+
+  await strategyFactory.createStrategy(pool.address, owner.address);
+
+  const _strategy0 = await strategyFactory.strategyByIndex(1);
+
+  const _strategy1 = await strategyFactory.strategyByIndex(2);
+
+  console.log("_strategty1", _strategy1);
+
+  strategy0 = await ethers.getContractAt("DefiEdgeStrategy", _strategy0);
+
+  strategy1 = await ethers.getContractAt("DefiEdgeStrategy", _strategy1);
 
   // add initial liquidity to start the pool
   tickLower = calculateTick(2500, 60);
@@ -109,6 +115,7 @@ beforeEach(async () => {
   await token1.approve(aggregator.address, approveAmt);
 
   // // adds 5000 token0 and 16580085.099454967 token1
+  console.log("strategy address from test script", strategy1.address);
   await aggregator
     .connect(owner)
     .addLiquidity(
@@ -137,7 +144,7 @@ describe("🟢  Adding Liquidity in single order", function () {
 
     const ticks = await aggregator.getTicks(strategy1.address);
 
-    await strategy1.changeTicksAndRebalance([
+    await strategy1.rebalance("0", "0", "0", false, [
       [
         "5000000000000000000",
         "17500000000000000000000",
@@ -186,7 +193,7 @@ describe("🟢  Adding Liquidity in single order", function () {
   });
 
   it("is able to rebalance again", async () => {
-    await strategy1.changeTicksAndRebalance([
+    await strategy1.rebalance("0", "0", "0", false, [
       [
         "1000000000000000000",
         "350000000000000000000",
@@ -223,7 +230,7 @@ describe("🟢 🟢 Rebalance using Multiple Ranges", () => {
     // ticks before rebalance
     ticksBefore = await aggregator.getTicks(strategy1.address);
 
-    await strategy1.changeTicksAndRebalance([
+    await strategy1.rebalance("0", "0", "0", false, [
       [
         "1000000000000000000",
         "35000000000000000000000",
@@ -303,7 +310,7 @@ describe("🤯 Swap With Rebalance", () => {
 
     const unusedBefore = await aggregator.unused(strategy1.address);
 
-    await strategy1.swapAndRebalance(
+    await strategy1.rebalance(
       "2000000000000000000",
       "1000000",
       "1000000",
@@ -393,7 +400,7 @@ describe("✋  Hold Funds", () => {
 
     const unusedBefore = await aggregator.unused(strategy1.address);
 
-    await strategy1.swapAndRebalance(
+    await strategy1.rebalance(
       "2000000000000000000",
       "1000000",
       "1000000",
@@ -423,7 +430,7 @@ describe("✋  Hold Funds", () => {
 
     const tickLowerX = calculateTick(2300, 60);
     const tickUpperX = calculateTick(3700, 60);
-    await strategy1.swapAndRebalance(
+    await strategy1.rebalance(
       toGwei(3900.6880796999767),
       "1000000",
       "1000000",
@@ -438,7 +445,7 @@ describe("✋  Hold Funds", () => {
       ]
     );
 
-    await strategy1.swapAndRebalance(toGwei(0), "1000000", "1000000", false, [
+    await strategy1.rebalance(toGwei(0), "1000000", "1000000", false, [
       [
         toGwei(0.01296328671820293),
         toGwei(33.278254018514),
@@ -447,7 +454,7 @@ describe("✋  Hold Funds", () => {
       ],
     ]);
 
-    await strategy1.swapAndRebalance(toGwei(0), "1000000", "1000000", false, [
+    await strategy1.rebalance(toGwei(0), "1000000", "1000000", false, [
       [
         toGwei(9.296328671820293),
         toGwei(33711.278254018514),

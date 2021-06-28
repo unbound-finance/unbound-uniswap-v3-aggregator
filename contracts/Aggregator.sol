@@ -9,8 +9,8 @@ import "./base/AggregatorManagement.sol";
 import "./base/UniswapPoolActions.sol";
 
 // import DefiEdge interfaces
-import "./interfaces/IUnboundStrategy.sol";
-import "./Strategy.sol";
+import "./interfaces/IStrategy.sol";
+import "./interfaces/IStrategyFactory.sol";
 
 // import libraries
 import "./libraries/LiquidityHelper.sol";
@@ -21,16 +21,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/SafeCast.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-// TODO: Add Reentrancy guard
-// TODO: Add Pausable functionality
-
-contract V3Aggregator is
+contract Aggregator is
     AggregatorBase,
     AggregatorManagement,
     UniswapPoolActions
 {
     using SafeMath for uint256;
     using SafeCast for uint256;
+
     // events
     event AddLiquidity(
         address indexed strategy,
@@ -44,11 +42,9 @@ contract V3Aggregator is
         uint256 amount1
     );
 
-    event Rebalance(address indexed strategy, IUnboundStrategy.Tick[] ticks);
+    event Rebalance(address indexed strategy, IStrategy.Tick[] ticks);
 
-    // TODO: Remove this later, only for testing on Kovan
-    uint256 public recentlyBurned0;
-    uint256 public recentlyBurned1;
+    address public factory;
 
     constructor(address _governance) {
         governance = _governance;
@@ -73,21 +69,21 @@ contract V3Aggregator is
     )
         external
         returns (
-            // uint256 _minShare
             uint256 share,
             uint256 amount0,
             uint256 amount1
         )
     {
-        // TODO: If liquidity is on hold don't pass, keep it in unused
-        // TODO: Figure out how to make use of fees while issuing shares
-
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-        // require(strategy.initialized(), "not initilized");
 
-        // get total number of assets under management
-        // (amount0, amount1) = getAUM(_strategy);
+        console.log("strategy address from contract", address(strategy));
+
+        // require(strategy.initialized(), "not initilized");
+        require(
+            IStrategyFactory(factory).isValid(_strategy),
+            "invalid strategy"
+        );
 
         // get liquidity before adding the new liqudiity
         uint128 liquidityBefore = getCurrentLiquidityWithFees(
@@ -148,7 +144,7 @@ contract V3Aggregator is
         uint256 _amount0Min,
         uint256 _amount1Min
     ) external returns (uint256 amount0, uint256 amount1) {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         require(
             shares[_strategy][msg.sender] >= _shares,
@@ -161,7 +157,7 @@ contract V3Aggregator is
 
         if (strategySnapshot.ticks.length != 0) {
             for (uint256 i = 0; i < strategySnapshot.ticks.length; i++) {
-                IUnboundStrategy.Tick memory tick = strategySnapshot.ticks[i];
+                IStrategy.Tick memory tick = strategySnapshot.ticks[i];
 
                 amount0 = tick.amount0.mul(_shares).div(totalShares[_strategy]);
                 amount1 = tick.amount1.mul(_shares).div(totalShares[_strategy]);
@@ -186,7 +182,6 @@ contract V3Aggregator is
         uint256 unusedAmount0;
         uint256 unusedAmount1;
 
-        // TODO: Make sure get unused do not underflow
         // get unused amounts of the strategy
         (unusedAmount0, unusedAmount1) = getUnusedAmounts(_strategy);
 
@@ -234,17 +229,13 @@ contract V3Aggregator is
         external
         returns (uint256 amount0, uint256 amount1)
     {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         Strategy storage strategySnapshot = strategies[_strategy];
-
-        // add blacklisting check
-        // TODO: Remove this check
-        require(!blacklisted[_strategy], "blacklisted");
 
         uint128 liquidity;
 
         // if hold is activated in strategy, strategy will burn the funds and hold
-        if (strategy.hold()) {
+        if (strategy.onHold()) {
             // burn liquidity
             (amount0, amount1, liquidity) = burnAllLiquidity(_strategy);
 
@@ -261,7 +252,7 @@ contract V3Aggregator is
             // amount in the current ranges
             (amount0, amount1) = getUnusedAmounts(_strategy);
 
-            strategySnapshot.hold = strategy.hold();
+            strategySnapshot.hold = strategy.onHold();
 
             // redploy the liquidity
             redeploy(_strategy, amount0, amount1);
@@ -295,7 +286,7 @@ contract V3Aggregator is
             uint256 amountOut
         )
     {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage strategySnapshot = strategies[_strategy];
 
@@ -331,7 +322,7 @@ contract V3Aggregator is
         delete strategySnapshot.ticks;
 
         for (uint256 i = 0; i < strategy.tickLength(); i++) {
-            IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+            IStrategy.Tick memory tick = strategy.ticks(i);
 
             // the amount going in mint liquidity should be influenced by swap amount;
             (amount0, amount1) = mintLiquidity(
@@ -345,12 +336,7 @@ contract V3Aggregator is
 
             // push new tick to the ticks array
             strategySnapshot.ticks.push(
-                IUnboundStrategy.Tick(
-                    amount0,
-                    amount1,
-                    tick.tickLower,
-                    tick.tickUpper
-                )
+                IStrategy.Tick(amount0, amount1, tick.tickLower, tick.tickUpper)
             );
 
             // add to the amounts outside the loop
@@ -373,7 +359,7 @@ contract V3Aggregator is
         uint256 _amount0,
         uint256 _amount1
     ) internal returns (uint256 amount0, uint256 amount1) {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
         Strategy storage strategySnapshot = strategies[_strategy];
 
@@ -423,7 +409,7 @@ contract V3Aggregator is
             delete strategySnapshot.ticks;
 
             for (uint256 i = 0; i < strategy.tickLength(); i++) {
-                IUnboundStrategy.Tick memory tick = strategy.ticks(i);
+                IStrategy.Tick memory tick = strategy.ticks(i);
 
                 (amount0, amount1) = mintLiquidity(
                     address(pool),
@@ -435,7 +421,7 @@ contract V3Aggregator is
                 );
 
                 strategySnapshot.ticks.push(
-                    IUnboundStrategy.Tick(
+                    IStrategy.Tick(
                         amount0,
                         amount1,
                         tick.tickLower,
@@ -464,7 +450,7 @@ contract V3Aggregator is
     function getTicks(address _strategy)
         public
         view
-        returns (IUnboundStrategy.Tick[] memory)
+        returns (IStrategy.Tick[] memory)
     {
         Strategy storage strategy = strategies[_strategy];
         return strategy.ticks;
@@ -487,7 +473,7 @@ contract V3Aggregator is
 
         // add amounts from different ranges
         for (uint256 i = 0; i < strategy.ticks.length; i++) {
-            IUnboundStrategy.Tick memory tick = strategy.ticks[i];
+            IStrategy.Tick memory tick = strategy.ticks[i];
             totalAmount0 = totalAmount0.add(tick.amount0);
             totalAmount1 = totalAmount1.add(tick.amount1);
         }
@@ -495,5 +481,17 @@ contract V3Aggregator is
         // add unused amounts
         amount0 = totalAmount0.add(unusedAmounts.amount0);
         amount1 = totalAmount1.add(unusedAmounts.amount1);
+    }
+
+    /**
+     * @dev Add factory for the first time after the deployment
+     * @param _factory Address of the factory
+     */
+    function addFactory(address _factory) external onlyGovernance {
+        require(
+            factory == address(0) && _factory != address(0),
+            "already added"
+        );
+        factory = _factory;
     }
 }
