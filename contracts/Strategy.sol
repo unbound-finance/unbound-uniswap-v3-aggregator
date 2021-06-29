@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.7.6;
+pragma solidity =0.7.6;
 pragma abicoder v2;
 
 import "@openzeppelin/contracts/utils/Context.sol";
@@ -96,12 +96,22 @@ contract DefiEdgeStrategy {
         // deletes ticks array
         delete ticks;
 
-        // TODO: Add a check that two tick upper and tick lowers are not in array cannot be same
-
-        // (uint256 allowedAmount0, uint256 allowedAmount1) =
-        //     IAggregator(aggregator).getAUM(address(this));
-
         for (uint256 i = 0; i < _ticks.length; i++) {
+            int24 tickLower = _ticks[i].tickLower;
+            int24 tickUpper = _ticks[i].tickUpper;
+
+            // check that two tick upper and tick lowers are not in array cannot be same
+            for (uint256 j = 0; j < _ticks.length; j++) {
+                if (i != j) {
+                    if (tickLower == _ticks[j].tickLower) {
+                        require(
+                            tickUpper != _ticks[j].tickUpper,
+                            "ticks cannot be same"
+                        );
+                    }
+                }
+            }
+
             ticks.push(
                 Tick(
                     _ticks[i].amount0,
@@ -111,10 +121,6 @@ contract DefiEdgeStrategy {
                 )
             );
         }
-        // require(
-        //     totalAmount0 <= allowedAmount0 && totalAmount1 <= allowedAmount1,
-        //     "total amounts exceed"
-        // );
     }
 
     /**
@@ -186,9 +192,9 @@ contract DefiEdgeStrategy {
     }
 
     // accept operator
-    function acceptOperator(address _operator) external {
-        require(_operator == pendingOperator, "invalid match");
-        operator = _operator;
+    function acceptOperator() external {
+        require(msg.sender == pendingOperator, "invalid match");
+        operator = pendingOperator;
     }
 
     // get length of ticks array

@@ -419,8 +419,8 @@ describe("✋  Hold Funds", () => {
         [
           "1000000000000000000",
           "35000000000000000000000",
-          calculateTick(2300, 60),
-          calculateTick(3700, 60),
+          calculateTick(3300, 60),
+          calculateTick(4000, 60),
         ],
       ]
     );
@@ -436,7 +436,8 @@ describe("✋  Hold Funds", () => {
     const tickUpperX = calculateTick(3700, 60);
 
     const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
-    const sqrtPriceLimitX96 = parseInt(sqrtRatioX96) + (parseInt(sqrtRatioX96) * 0.5);
+    const sqrtPriceLimitX96 =
+      parseInt(sqrtRatioX96) + parseInt(sqrtRatioX96) * 0.5;
 
     await strategy1.rebalance(
       toGwei(3900.6880796999767),
@@ -449,6 +450,27 @@ describe("✋  Hold Funds", () => {
           toGwei(33711.278254018514),
           calculateTick(2300, 60),
           calculateTick(3700, 60),
+        ],
+      ]
+    );
+
+    await strategy1.rebalance(
+      "0",
+      toGwei(sqrtPriceLimitX96 / 1e18),
+      "1000000",
+      true,
+      [
+        [
+          "1000000000000000000",
+          "35000000000000000000000",
+          calculateTick(2600, 60),
+          calculateTick(3300, 60),
+        ],
+        [
+          "1000000000000000000",
+          "35000000000000000000000",
+          calculateTick(3300, 60),
+          calculateTick(4000, 60),
         ],
       ]
     );

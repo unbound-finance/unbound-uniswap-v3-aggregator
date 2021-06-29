@@ -16,6 +16,7 @@ let tickUpper;
 
 async function main() {
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
+  const factoryAddress = ""
   const config = {
     dai: '0xb02ed89Ce41B1fE8a6692060Fa630EE7AF9719e1',
     eth: '0xFfC6339A7C2B511dFbB2b153B7dF96c6B55Dc7C5',
@@ -31,6 +32,8 @@ async function main() {
   const _token1 = config.eth;
 
   const TestStrategy = await ethers.getContractFactory("DefiEdgeStrategy");
+
+  const StrategyFactory = await ethers.getContractFactory("StrategyFactory");
 
   aggregator = await ethers.getContractAt("Aggregator", _aggregator);
   pool = await ethers.getContractAt("UniswapV3Pool", _pool);
@@ -54,8 +57,10 @@ async function main() {
     tickUpper = calculateTick(4500, 60);
   }
 
-  // deploy strategy contract
-  strategy = await TestStrategy.deploy(aggregator.address, pool.address, owner);
+  const strategyFactory = await ethers.getContractAt("StrategyFactory", factoryAddress);
+  const strategyAddress = await strategyFactory.getStrategyByIndex(1)
+
+  strategy = await ethers.getContractAt("DefiEdgeStrategy", strategyAddress);
 
   await strategy.initialize([[0, 0, tickLower, tickUpper]]);
 

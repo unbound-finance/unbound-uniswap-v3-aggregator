@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity >=0.7.6;
+pragma solidity =0.7.6;
 
 pragma abicoder v2;
 
@@ -47,6 +47,7 @@ contract Aggregator is
     address public factory;
 
     constructor(address _governance) {
+        require(_governance != address(0), "invalid governance address");
         governance = _governance;
         feeTo = address(0);
     }
@@ -82,6 +83,9 @@ contract Aggregator is
             IStrategyFactory(factory).isValid(_strategy),
             "invalid strategy"
         );
+
+        // require(strategy.initialized(), "not initilized");
+        require(strategy.initialized(), "uninitialised strategy");
 
         // get liquidity before adding the new liqudiity
         uint128 liquidityBefore = getCurrentLiquidityWithFees(
@@ -373,6 +377,26 @@ contract Aggregator is
 
             (amount0, amount1, amountOut) = swapAndRedeploy(_strategy);
 
+            if (strategy.zeroToOne()) {
+                require(
+                    amount0 <= _amount0.sub(strategy.swapAmount()),
+                    "not allowed to use more"
+                );
+                require(
+                    amount1 <= _amount1.add(amountOut),
+                    "not allowed to use more"
+                );
+            } else {
+                require(
+                    amount1 <= _amount1.sub(strategy.swapAmount()),
+                    "not allowed to use more"
+                );
+                require(
+                    amount0 <= _amount0.add(amountOut),
+                    "not allowed to use more"
+                );
+            }
+
             // calculate unused amounts
             if (strategy.zeroToOne()) {
                 // if deployed amount0 is greater than burned amount0
@@ -440,6 +464,10 @@ contract Aggregator is
                 totalAmount1 = totalAmount1.add(amount1);
             }
 
+            // strategies should not be able to use funds more than they manage
+            require(totalAmount0 <= _amount0, "not allowed to use more");
+            require(totalAmount1 <= _amount1, "not allowed to use more");
+
             // to calculate unused amount substract the deployed amounts from original amounts
             amount0 = _amount0.sub(totalAmount0);
             amount1 = _amount1.sub(totalAmount1);
@@ -501,38 +529,37 @@ contract Aggregator is
         factory = _factory;
     }
 
-    // TODO: Remove this function once tested on mainnet
-    function emergencyBurn(
-        address _pool,
-        int24 _tickLower,
-        int24 _tickUpper
-    ) external onlyGovernance {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-        (uint128 currentLiquidity, , , , ) = pool.positions(
-            PositionKey.compute(address(this), _tickLower, _tickUpper)
-        );
-        pool.burn(_tickLower, _tickUpper, currentLiquidity);
+    // // TODO: Remove this function once tested on mainnet
+    // function emergencyBurn(
+    //     address _pool,
+    //     int24 _tickLower,
+    //     int24 _tickUpper
+    // ) external onlyGovernance {
+    //     IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+    //     (uint128 currentLiquidity, , , , ) = pool.positions(
+    //         PositionKey.compute(address(this), _tickLower, _tickUpper)
+    //     );
+    //     pool.burn(_tickLower, _tickUpper, currentLiquidity);
 
-        // collect fees
-        pool.collect(
-            address(this),
-            _tickLower,
-            _tickUpper,
-            type(uint128).max,
-            type(uint128).max
-        );
-    }
+    //     // collect fees
+    //     pool.collect(
+    //         address(this),
+    //         _tickLower,
+    //         _tickUpper,
+    //         type(uint128).max,
+    //         type(uint128).max
+    //     );
+    // }
 
-    // TODO: Remove this function once tested on mainnet
-    function emergencyWithdraw(
-        address _pool,
-        uint256 _amount0,
-        uint256 _amount1
-    ) external onlyGovernance {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-        // transfer the tokens back
-
-        TransferHelper.safeTransfer(pool.token0(), msg.sender, _amount0);
-        TransferHelper.safeTransfer(pool.token1(), msg.sender, _amount1);
-    }
+    // // TODO: Remove this function once tested on mainnet
+    // function emergencyWithdraw(
+    //     address _pool,
+    //     uint256 _amount0,
+    //     uint256 _amount1
+    // ) external onlyGovernance {
+    //     IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+    //     // transfer the tokens back
+    //     TransferHelper.safeTransfer(pool.token0(), msg.sender, _amount0);
+    //     TransferHelper.safeTransfer(pool.token1(), msg.sender, _amount1);
+    // }
 }

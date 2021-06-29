@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity >=0.7.6;
+pragma solidity =0.7.6;
 pragma abicoder v2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -167,7 +167,6 @@ contract AggregatorManagement is AggregatorBase {
         if (strategy.feeTo() != address(0) && strategy.managementFee() > 0) {
             uint256 managerShare = share.mul(strategy.managementFee()).div(1e6);
             mintShare(_strategy, managerShare, strategy.feeTo());
-            console.log("manager share", managerShare);
             share = share.sub(managerShare);
         }
 
