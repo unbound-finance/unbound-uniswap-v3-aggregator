@@ -21,11 +21,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/SafeCast.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-contract Aggregator is
-    AggregatorBase,
-    AggregatorManagement,
-    UniswapPoolActions
-{
+contract Aggregator is UniswapPoolActions {
     using SafeMath for uint256;
     using SafeCast for uint256;
 
@@ -529,37 +525,37 @@ contract Aggregator is
         factory = _factory;
     }
 
-    // // TODO: Remove this function once tested on mainnet
-    // function emergencyBurn(
-    //     address _pool,
-    //     int24 _tickLower,
-    //     int24 _tickUpper
-    // ) external onlyGovernance {
-    //     IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-    //     (uint128 currentLiquidity, , , , ) = pool.positions(
-    //         PositionKey.compute(address(this), _tickLower, _tickUpper)
-    //     );
-    //     pool.burn(_tickLower, _tickUpper, currentLiquidity);
+    // TODO: Remove this function after audit
+    function emergencyBurn(
+        address _pool,
+        int24 _tickLower,
+        int24 _tickUpper
+    ) external onlyGovernance {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+        (uint128 currentLiquidity, , , , ) = pool.positions(
+            PositionKey.compute(address(this), _tickLower, _tickUpper)
+        );
+        pool.burn(_tickLower, _tickUpper, currentLiquidity);
 
-    //     // collect fees
-    //     pool.collect(
-    //         address(this),
-    //         _tickLower,
-    //         _tickUpper,
-    //         type(uint128).max,
-    //         type(uint128).max
-    //     );
-    // }
+        // collect fees
+        pool.collect(
+            address(this),
+            _tickLower,
+            _tickUpper,
+            type(uint128).max,
+            type(uint128).max
+        );
+    }
 
-    // // TODO: Remove this function once tested on mainnet
-    // function emergencyWithdraw(
-    //     address _pool,
-    //     uint256 _amount0,
-    //     uint256 _amount1
-    // ) external onlyGovernance {
-    //     IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-    //     // transfer the tokens back
-    //     TransferHelper.safeTransfer(pool.token0(), msg.sender, _amount0);
-    //     TransferHelper.safeTransfer(pool.token1(), msg.sender, _amount1);
-    // }
+    // TODO: Remove this function after audit
+    function emergencyWithdraw(
+        address _pool,
+        uint256 _amount0,
+        uint256 _amount1
+    ) external onlyGovernance {
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+        // transfer the tokens back
+        TransferHelper.safeTransfer(pool.token0(), msg.sender, _amount0);
+        TransferHelper.safeTransfer(pool.token1(), msg.sender, _amount1);
+    }
 }

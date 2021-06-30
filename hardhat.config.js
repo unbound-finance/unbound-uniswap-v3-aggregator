@@ -35,7 +35,7 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 1_000_000,
+        runs: 1_000,
       },
       metadata: {
         bytecodeHash: 'none',

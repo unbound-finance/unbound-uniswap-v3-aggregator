@@ -3,6 +3,7 @@ const { expect } = require("chai");
 const { BigNumber, utils } = require("ethers");
 
 const { ethers } = require("hardhat");
+// const { pool } = require("../scripts/config");
 
 const {
   encodePriceSqrt,
@@ -16,6 +17,8 @@ let StrategyFactory;
 let TestToken;
 let DefiEdgeStrategy;
 let Aggregator;
+let SwapRouter;
+
 let userA;
 let userB;
 
@@ -29,10 +32,12 @@ async function loadContracts() {
   DefiEdgeStrategy = await ethers.getContractFactory("DefiEdgeStrategy");
   Aggregator = await ethers.getContractFactory("Aggregator");
   LiquidityHelper = await ethers.getContractFactory("LiquidityHelper");
+  SwapRouter = await ethers.getContractFactory("TestSwap");
 }
 
 let token0;
 let token1;
+let weth9;
 let owner;
 let uniswapFactory;
 let aggregator;
@@ -59,6 +64,8 @@ beforeEach(async () => {
     token1.address,
     "3000"
   );
+
+  console.log("pool address from the script", poolAddress);
   pool = await ethers.getContractAt("UniswapV3Pool", poolAddress);
 
   let sqrtPriceX96 = encodePriceSqrt("500000", "1500000000");
@@ -115,19 +122,26 @@ beforeEach(async () => {
 
   // // adds 5000 token0 and 16580085.099454967 token1
 
-  await aggregator
-    .connect(owner)
-    .addLiquidity(
-      strategy0.address,
-      "5000000000000000000000",
-      "1500000000000000000000000000",
-      0,
-      0,
-      0
-    );
+  // await aggregator
+  //   .connect(owner)
+  //   .addLiquidity(
+  //     strategy0.address,
+  //     "50000000000000000000000",
+  //     "15000000000000000000000000000",
+  //     0,
+  //     0,
+  //     0
+  //   );
+
+  console.log("uniswap factory address", uniswapFactory.address);
+  swapRouter = await SwapRouter.deploy();
+
+  // approve tokens for aggregator
+  await token0.approve(swapRouter.address, approveAmt);
+  await token1.approve(swapRouter.address, approveAmt);
 });
 
-describe("🟢  Adding Liquidity in single order", function () {
+describe("🟢  Swap", function () {
   beforeEach("add and rebalance pair", async () => {
     // adds 10 and 31630.148889005883
     await aggregator
@@ -140,6 +154,21 @@ describe("🟢  Adding Liquidity in single order", function () {
         0,
         0
       );
+    const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
+    const sqrtPriceLimitX96 = sqrtRatioX96 - (sqrtRatioX96 * 10) / 100;
+    
+    console.log("before token0", await pool.feeGrowthGlobal0X128())
+    console.log("before token1", await pool.feeGrowthGlobal1X128())
+
+    await swapRouter.swap(
+      pool.address,
+      true,
+      "10000000000000000000",
+      toGwei(sqrtPriceLimitX96 / 1e18)
+    );
+
+    console.log("after token0", await pool.feeGrowthGlobal0X128())
+    console.log("after token1", await pool.feeGrowthGlobal1X128())
 
     const ticks = await aggregator.getTicks(strategy1.address);
 
@@ -163,7 +192,6 @@ describe("🟢  Adding Liquidity in single order", function () {
     );
   });
 
-
   // TODO: Add test to deploy 100% liquidity in single order
 });
 
@@ -182,6 +210,14 @@ async function deployTestTokens() {
     "TST0",
     18,
     "100000000000000000000000000000",
+    owner.address
+  );
+
+  weth9 = await TestToken.deploy(
+    "Wrapped Ether",
+    "WETH9",
+    18,
+    "1",
     owner.address
   );
 }

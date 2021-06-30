@@ -22,7 +22,7 @@ async function main() {
 
   strategy = await ethers.getContractAt(
     "DefiEdgeStrategy",
-    "0xEcAF2bF80400430A3658F6c67dfbD46cAfEE41Fc"
+    "0xc628F1535efF40a9f2365854e1065601A15fe32E"
   );
 
   let tickUpper, tickLower;

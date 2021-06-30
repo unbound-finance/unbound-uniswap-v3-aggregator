@@ -54,14 +54,6 @@ contract AggregatorBase {
         feeTo = _feeTo;
     }
 
-    /**
-     * @dev Blacklists the strategy
-     * @param _strategy Address of the strategy
-     */
-    function blacklist(address _strategy) external onlyGovernance {
-        blacklisted[_strategy] = true;
-    }
-
     // Checks if sender is owner
     function isOwner() public view returns (bool) {
         return msg.sender == governance;

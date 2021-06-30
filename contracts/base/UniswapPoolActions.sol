@@ -29,7 +29,6 @@ contract UniswapPoolActions is
     address pool_;
 
     event FeesClaimed(
-        address indexed pool,
         address indexed strategy,
         uint256 amount0,
         uint256 amount1
@@ -145,9 +144,9 @@ contract UniswapPoolActions is
             uint128(tokensOwed1)
         );
 
+
         emit FeesClaimed(
             _strategy,
-            _pool,
             collect0 > _amount0 ? uint256(collect0).sub(_amount0) : 0,
             collect1 > _amount1 ? uint256(collect1).sub(_amount1) : 0
         );

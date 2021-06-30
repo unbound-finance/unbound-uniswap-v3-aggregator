@@ -49,17 +49,6 @@ contract DefiEdgeStrategy {
 
     Tick[] public ticks;
 
-    address public factory;
-
-    uint256 totalAmount0;
-    uint256 totalAmount1;
-
-    enum feeTier {
-        SMALL,
-        MEDIUM,
-        LARGE
-    }
-
     constructor(
         address _aggregator,
         address _pool,
@@ -171,10 +160,16 @@ contract DefiEdgeStrategy {
 
     /**
      * @notice Changes the fee
-     * @param _newFee New fee
+     * @param _tier Fee tier from indexes 0 to 2
      */
-    function changeFee(uint256 _newFee) public onlyOperator {
-        managementFee = _newFee;
+    function changeFee(uint256 _tier) public onlyOperator {
+        if (_tier == 2) {
+            managementFee = 5000000;
+        } else if (_tier == 1) {
+            managementFee = 2000000;
+        } else {
+            managementFee = 1000000;
+        }
     }
 
     /**

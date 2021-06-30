@@ -3,10 +3,8 @@
 pragma solidity =0.7.6;
 pragma abicoder v2;
 
-import "./Strategy.sol";
+import "./DefiEdgeStrategy.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
-
-import "hardhat/console.sol";
 
 contract StrategyFactory {
     using SafeMath for uint256;

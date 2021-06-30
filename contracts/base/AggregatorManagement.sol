@@ -9,9 +9,6 @@ import "./AggregatorBase.sol";
 
 import "../interfaces/IStrategy.sol";
 
-// TODO: Remove
-import "hardhat/console.sol";
-
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
@@ -39,15 +36,12 @@ contract AggregatorManagement is AggregatorBase {
         uint256 amount
     );
 
-    // TODO: Hardcode Fees
-
-
     mapping(address => mapping(address => uint256)) public shares;
 
     // mapping of strategies with their total share
     mapping(address => uint256) public totalShares;
 
-    // hold
+    // unused amounts
     mapping(address => UnusedAmounts) public unused;
 
     /**
@@ -165,13 +159,13 @@ contract AggregatorManagement is AggregatorBase {
 
         // strategy owner fees
         if (strategy.feeTo() != address(0) && strategy.managementFee() > 0) {
-            uint256 managerShare = share.mul(strategy.managementFee()).div(1e6);
+            uint256 managerShare = share.mul(strategy.managementFee()).div(1e8);
             mintShare(_strategy, managerShare, strategy.feeTo());
             share = share.sub(managerShare);
         }
 
         if (feeTo != address(0)) {
-            uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
+            uint256 fee = share.mul(PROTOCOL_FEE).div(1e8);
             share = share.sub(fee);
             // issue fee
             mintShare(_strategy, fee, feeTo);
