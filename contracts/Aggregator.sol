@@ -230,6 +230,8 @@ contract Aggregator is UniswapPoolActions {
         // check if rebalance is getting called from strategy contract or not
         require(IStrategyFactory(factory).isValid(msg.sender));
 
+        require(!blacklisted[_strategy], "blacklisted");
+
         IStrategy strategy = IStrategy(_strategy);
         Strategy storage strategySnapshot = strategies[_strategy];
 
