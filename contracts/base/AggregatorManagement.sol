@@ -17,6 +17,7 @@ contract AggregatorManagement is AggregatorBase {
         bool hold;
     }
 
+    // store strategy
     mapping(address => Strategy) public strategies;
 
     struct UnusedAmounts {

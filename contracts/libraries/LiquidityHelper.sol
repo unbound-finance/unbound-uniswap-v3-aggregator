@@ -11,8 +11,6 @@ import "../interfaces/IStrategy.sol";
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
 
-import "hardhat/console.sol";
-
 library LiquidityHelper {
     using SafeMath for uint256;
 
@@ -102,66 +100,4 @@ library LiquidityHelper {
             liquidity = liquidity + currentLiquidity;
         }
     }
-
-
-    // function getAccumulatedFees(
-    //     address _pool,
-    //     int24 _tickLower,
-    //     int24 _tickUpper
-    // ) internal returns (uint128 amount0, uint128 amount1) {
-    //     IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-    //     // get current liquidity for range order
-    //     (, , , uint128 tokensOwed0, uint128 tokensOwed1) =
-    //         pool.positions(
-    //             PositionKey.compute(address(this), _tickLower, _tickUpper)
-    //         );
-
-    //     uint128 amount0Liquidity =
-    //         LiquidityAmounts.getLiquidityForAmount0(
-    //             TickMath.getSqrtRatioAtTick(_tickLower),
-    //             TickMath.getSqrtRatioAtTick(_tickUpper),
-    //             tokensOwed0
-    //         );
-
-    //     uint128 amount1Liquidity =
-    //         LiquidityAmounts.getLiquidityForAmount0(
-    //             TickMath.getSqrtRatioAtTick(_tickLower),
-    //             TickMath.getSqrtRatioAtTick(_tickUpper),
-    //             tokensOwed1
-    //         );
-
-    //     // get liquidity for amounts owned
-    //     (
-    //         ,
-    //         uint256 feeGrowthInside0LastX128,
-    //         uint256 feeGrowthInside1LastX128,
-    //         ,
-
-    //     ) =
-    //         pool.positions(
-    //             PositionKey.compute(address(this), _tickLower, _tickUpper)
-    //         );
-
-    //     // divide fee growth by liquidity
-    //     amount0Liquidity = uint128(feeGrowthInside0LastX128) / amount0Liquidity;
-    //     amount1Liquidity = uint128(feeGrowthInside1LastX128) / amount1Liquidity;
-
-    //     amount0 = uint128(
-    //         LiquidityAmounts.getAmount0ForLiquidity(
-    //             TickMath.getSqrtRatioAtTick(_tickLower),
-    //             TickMath.getSqrtRatioAtTick(_tickUpper),
-    //             amount0Liquidity
-    //         )
-    //     );
-
-    //     amount1 = uint128(
-    //         LiquidityAmounts.getAmount1ForLiquidity(
-    //             TickMath.getSqrtRatioAtTick(_tickLower),
-    //             TickMath.getSqrtRatioAtTick(_tickUpper),
-    //             amount1Liquidity
-    //         )
-    //     );
-
-    //     // convert the divided liquidity value to amounts and return amounts
-    // }
 }

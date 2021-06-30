@@ -19,12 +19,12 @@ contract AggregatorBase {
 
     // Modifiers
     modifier onlyGovernance() {
-        require(isOwner(), "Ownable: caller is not the owner");
+        require(msg.sender == governance, "Ownable: caller is not the owner");
         _;
     }
 
     /**
-     * @dev Change the fee setter's address
+     * @notice Change the fee setter's address
      * @param _governance New governance address
      */
     function changeGovernance(address _governance) external onlyGovernance {
@@ -32,6 +32,9 @@ contract AggregatorBase {
         pendingGovernance = _governance;
     }
 
+    /**
+     * @notice Accepts the governance
+     */
     function acceptGovernance() external onlyGovernance {
         require(msg.sender == pendingGovernance, "invalid match");
         governance = pendingGovernance;
@@ -52,10 +55,5 @@ contract AggregatorBase {
      */
     function changeFeeTo(address _feeTo) external onlyGovernance {
         feeTo = _feeTo;
-    }
-
-    // Checks if sender is owner
-    function isOwner() public view returns (bool) {
-        return msg.sender == governance;
     }
 }

@@ -19,6 +19,7 @@ contract StrategyFactory {
     // check validity of the strategy
     mapping(address => bool) public isValid;
 
+    // total number of strategies
     uint256 public total;
 
     constructor(address _aggregator) {
@@ -36,7 +37,7 @@ contract StrategyFactory {
     {
         strategy = address(new DefiEdgeStrategy(aggregator, _pool, _operator));
         isValid[strategy] = true;
-        strategyByIndex[total + 1] = strategy;
+        strategyByIndex[total.add(1)] = strategy;
         total += 1;
         emit NewStrategy(strategy, msg.sender);
     }

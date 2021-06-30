@@ -100,7 +100,8 @@ contract DefiEdgeStrategy {
                     }
                 }
             }
-
+            
+            // push to the ticks array
             ticks.push(
                 Tick(
                     _ticks[i].amount0,
@@ -164,11 +165,11 @@ contract DefiEdgeStrategy {
      */
     function changeFee(uint256 _tier) public onlyOperator {
         if (_tier == 2) {
-            managementFee = 5000000;
+            managementFee = 5000000; // 5%
         } else if (_tier == 1) {
-            managementFee = 2000000;
+            managementFee = 2000000; // 2%
         } else {
-            managementFee = 1000000;
+            managementFee = 1000000; // 1%
         }
     }
 
