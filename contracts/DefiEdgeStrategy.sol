@@ -71,11 +71,12 @@ contract DefiEdgeStrategy {
         require(initialized, "Ownable: strategy not initialized");
         _;
     }
-
-    // Checks if sender is operator
-    function isOperator() internal view returns (bool) {
-        return msg.sender == operator;
-    }
+        
+     //Not required as on 64 line we are using onlyOperator modifier as veryfying
+    // Checks if sender is operator 
+   // function isOperator() internal view returns (bool) {
+   //     return msg.sender == operator;
+   // }
 
     /**
      * @dev Replaces old ticks with new ticks
