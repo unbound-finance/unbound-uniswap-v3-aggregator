@@ -18,8 +18,6 @@ import "../interfaces/IStrategy.sol";
 
 import "../base/AggregatorManagement.sol";
 
-// TODO: Remove this
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract UniswapPoolActions is
     AggregatorManagement,

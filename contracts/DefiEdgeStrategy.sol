@@ -6,11 +6,6 @@ pragma abicoder v2;
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "hardhat/console.sol";
-
-// TODO: Add events on each action
-// TODO: Add address validation checks
-// TODO: Add logic in such a way that both ticks cannot be same
 
 interface IAggregator {
     function rebalance(address _strategy) external;

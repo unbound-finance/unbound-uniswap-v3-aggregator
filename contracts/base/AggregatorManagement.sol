@@ -151,8 +151,6 @@ contract AggregatorManagement is AggregatorBase {
 
         uint256 totalShares = totalShares[_strategy];
 
-        (uint256 aumamount0, uint256 aumamount1) = getAUM(_strategy);
-
         uint256 totalAmount0 = _totalAmount0;
         uint256 totalAmount1 = _totalAmount1;
 

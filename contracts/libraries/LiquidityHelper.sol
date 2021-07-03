@@ -72,23 +72,6 @@ library LiquidityHelper {
         );
     }
 
-    // // TODO: Remove this
-    // function getAmountsForLiquidityTest(
-    //     uint160 sqrtRatioX96,
-    //     int24 _tickLower,
-    //     int24 _tickUpper,
-    //     uint128 _liquidity
-    // ) external view returns (uint256 amount0, uint256 amount1) {
-
-    //     // calculate liquidity needs to be added
-    //     (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
-    //         sqrtRatioX96,
-    //         TickMath.getSqrtRatioAtTick(_tickLower),
-    //         TickMath.getSqrtRatioAtTick(_tickUpper),
-    //         _liquidity
-    //     );
-    // }
-
     /**
      * @dev Get the liquidity between current ticks
      * @param _pool Address of the pool

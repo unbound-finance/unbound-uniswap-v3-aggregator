@@ -57,10 +57,12 @@ contract AggregatorBase {
         feeTo = _feeTo;
     }
 
+    // blacklist strategy
     function blacklist(address _strategy) external onlyGovernance {
         blacklisted[_strategy] = true;
     }
 
+    // remove strategy from blacklist
     function removeBlacklist(address _strategy) external onlyGovernance {
         blacklisted[_strategy] = false;
     }
