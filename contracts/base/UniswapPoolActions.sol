@@ -18,6 +18,9 @@ import "../interfaces/IStrategy.sol";
 
 import "../base/AggregatorManagement.sol";
 
+// TODO: Remove this
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 contract UniswapPoolActions is
     AggregatorManagement,
     IUniswapV3MintCallback,
@@ -108,13 +111,12 @@ contract UniswapPoolActions is
         )
     {
         // calculate current liquidity
-        // substract 100 GWEI to counter with precision error coming from Uniswap
         liquidity = LiquidityHelper.getLiquidityForAmounts(
             _pool,
             _tickLower,
             _tickUpper,
-            _amount0 > 100 ? _amount0.sub(100) : 0,
-            _amount1 > 100 ? _amount1.sub(100) : 0
+            _amount0 > 100 ? _amount0.sub(100) : _amount0,
+            _amount1 > 100 ? _amount1.sub(100) : _amount1
         );
 
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
@@ -144,11 +146,10 @@ contract UniswapPoolActions is
             uint128(tokensOwed1)
         );
 
-
         emit FeesClaimed(
             _strategy,
-            collect0 > _amount0 ? uint256(collect0).sub(_amount0) : 0,
-            collect1 > _amount1 ? uint256(collect1).sub(_amount1) : 0
+            collect0 > tokensBurned0 ? uint256(collect0).sub(tokensBurned0) : 0,
+            collect1 > tokensBurned1 ? uint256(collect1).sub(tokensBurned1) : 0
         );
     }
 
@@ -320,35 +321,24 @@ contract UniswapPoolActions is
     }
 
     /**
-     * @dev Get the liquidity between current ticks
-     * @param _pool Address of the pool
+     * @notice Get all assets under management for specific strategy
      * @param _strategy Address of the strategy
      */
-    function getCurrentLiquidityWithFees(address _pool, address _strategy)
+    function getAUMWithFees(address _strategy)
         internal
-        returns (uint128 liquidity)
+        returns (uint256 amount0, uint256 amount1)
     {
         IStrategy strategy = IStrategy(_strategy);
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+
+        (amount0, amount1) = getAUM(_strategy);
 
         for (uint256 i = 0; i < strategy.tickLength(); i++) {
             IStrategy.Tick memory tick = strategy.ticks(i);
 
             uint128 fees;
 
-            // update fees earned in Uniswap pool
-            // Uniswap recalculates the fees and updates the variables when amount is passed as 0
-            if (liquidity > 0) {
-                pool.burn(tick.tickLower, tick.tickUpper, 0);
-            }
-
-            (
-                uint128 currentLiquidity,
-                ,
-                ,
-                uint128 tokensOwed0,
-                uint128 tokensOwed1
-            ) = pool.positions(
+            (uint128 currentLiquidity, , , , ) = pool.positions(
                 PositionKey.compute(
                     address(this),
                     tick.tickLower,
@@ -356,16 +346,23 @@ contract UniswapPoolActions is
                 )
             );
 
-            // convert collected fees in form of liquidity
-            fees = LiquidityHelper.getLiquidityForAmounts(
-                _pool,
-                tick.tickLower,
-                tick.tickUpper,
-                tokensOwed0,
-                tokensOwed1
+            // update fees earned in Uniswap pool
+            // Uniswap recalculates the fees and updates the variables when amount is passed as 0
+            if (currentLiquidity > 0) {
+                pool.burn(tick.tickLower, tick.tickUpper, 0);
+            }
+
+            (, , , uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(
+                PositionKey.compute(
+                    address(this),
+                    tick.tickLower,
+                    tick.tickUpper
+                )
             );
 
-            liquidity = liquidity + currentLiquidity + fees;
+            // add fees to the amounts
+            amount0 = amount0.add(tokensOwed0);
+            amount1 = amount1.add(tokensOwed1);
         }
     }
 }

@@ -3,26 +3,34 @@ const { ethers } = require("hardhat");
 const bn = require("bignumber.js");
 const hre = require("hardhat");
 
-const config = require('./config');
+const config = require("./config");
 
 bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 });
 
 async function main() {
   console.log("⭐  Deployment Started");
 
-  const dai = await ethers.getContractAt("ERC20", config.dai);
-  const eth = await ethers.getContractAt("ERC20", config.eth);
+  const addresses = {
+    owner: "0x22CB224F9FA487dCE907135B57C779F1f32251D4",
+    dai: "0xdbdBc8fd9117872D64a9dA8ab6c9Ae243e45B844",
+    eth: "0x98E652945f92817a924127AEdFB078261490C3fe",
+    factory: "0xFeA042D1a3AfFaED5018E72C33aB79DD40e3B284",
+    pool: "0x737FC2b8DA21e79000D30641E459e79823e7D1ec",
+  };
+
+  const dai = await ethers.getContractAt("ERC20", addresses.dai);
+  const eth = await ethers.getContractAt("ERC20", addresses.eth);
 
   const factory = await ethers.getContractAt(
     "StrategyFactory",
-    config.strategyFactory
+    addresses.factory
   );
 
-  const pool = await ethers.getContractAt("UniswapV3Pool", config.pool);
+  const pool = await ethers.getContractAt("UniswapV3Pool", addresses.pool);
 
-  await factory.createStrategy(pool.address, config.owner);
+  await factory.createStrategy(pool.address, addresses.owner);
 
-  const index = await factory.total()
+  const index = await factory.total();
 
   const strategyAddress = await factory.strategyByIndex(parseInt(index));
   const strategy = await ethers.getContractAt(
@@ -33,12 +41,12 @@ async function main() {
   let tickUpper, tickLower;
   if (dai.address < eth.address) {
     // add initial liquidity to start the pool
-    tickUpper = calculateTick(0.0003333333333333333, 60);
-    tickLower = calculateTick(0.00025, 60);
+    tickUpper = -62160;
+    tickLower = -64020;
   } else {
     // add initial liquidity to start the pool
-    tickLower = calculateTick(3000, 60);
-    tickUpper = calculateTick(4000, 60);
+    tickLower = calculateTick(500, 60);
+    tickUpper = calculateTick(600, 60);
   }
 
   await strategy.initialize([[0, 0, tickLower, tickUpper]]);
@@ -49,7 +57,6 @@ async function main() {
   console.log({
     strategy: strategy.address,
   });
-
 }
 
 function encodePriceSqrt(reserve0, reserve1) {

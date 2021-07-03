@@ -228,6 +228,20 @@ describe("🟢 🟢 Rebalance using Multiple Ranges", () => {
     // ticks before rebalance
     ticksBefore = await aggregator.getTicks(strategy1.address);
 
+    const unused = await aggregator.unused(strategy1.address);
+
+    console.log("unused amount0 before", unused.amount0.toString());
+    console.log("unused amoutn1 before", unused.amount1.toString());
+    console.log(
+      "baanceOf amount0 before",
+      await token0.balanceOf(aggregator.address)
+    );
+    console.log(
+      "baanceOf amount1 before",
+      await token1.balanceOf(aggregator.address)
+    );
+
+    console.log("after rebalance");
     await strategy1.rebalance("0", "0", "0", false, [
       [
         "1000000000000000000",
@@ -242,10 +256,19 @@ describe("🟢 🟢 Rebalance using Multiple Ranges", () => {
         calculateTick(3700, 60),
       ],
     ]);
+
+    console.log("baanceOf amount0", await token0.balanceOf(aggregator.address));
+    console.log("baanceOf amount1", await token1.balanceOf(aggregator.address));
   });
 
   it("updates the unused amounts", async () => {
     const unused = await aggregator.unused(strategy1.address);
+
+    console.log("unused amount0", unused.amount0.toString());
+    console.log("unused amoutn1", unused.amount1.toString());
+    console.log("baanceOf amount0", await token0.balanceOf(aggregator.address));
+    console.log("baanceOf amount1", await token1.balanceOf(aggregator.address));
+
     expect(unused.amount0.toString()).to.equal(
       await token0.balanceOf(aggregator.address)
     );

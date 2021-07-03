@@ -100,7 +100,7 @@ contract DefiEdgeStrategy {
                     }
                 }
             }
-            
+
             // push to the ticks array
             ticks.push(
                 Tick(
@@ -181,19 +181,26 @@ contract DefiEdgeStrategy {
         feeTo = _newFeeTo;
     }
 
-    // change operator
+    /**
+     * @notice Change the operator
+     * @param _operator Address of the new operator
+     */
     function changeOperator(address _operator) external onlyOperator {
         require(_operator != address(0), "invalid operator");
         pendingOperator = _operator;
     }
 
-    // accept operator
+    /**
+     * @notice Change the operator
+     */
     function acceptOperator() external {
         require(msg.sender == pendingOperator, "invalid match");
         operator = pendingOperator;
     }
 
-    // get length of ticks array
+    /**
+     * @notice Returns lengths of the ticks
+     */
     function tickLength() public view returns (uint256 length) {
         length = ticks.length;
     }

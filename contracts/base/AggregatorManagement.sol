@@ -135,27 +135,40 @@ contract AggregatorManagement is AggregatorBase {
      * @param _strategy Address of the strategy
      * @param _amount0 Amount of token0
      * @param _amount1 Amount of token1
-     * @param _liquidityBefore The liquidity before the user amounts are added
-     * @param _liquidityAfter Liquidity after user's liquidity is minted
+     * @param _totalAmount0 Total amount0 in the specific strategy
+     * @param _totalAmount1 Total amount1 in the specific strategy
      * @param _user address where shares should be issued
      */
     function issueShare(
         address _strategy,
         uint256 _amount0,
         uint256 _amount1,
-        uint128 _liquidityBefore,
-        uint128 _liquidityAfter,
+        uint256 _totalAmount0,
+        uint256 _totalAmount1,
         address _user
     ) internal returns (uint256 share) {
         IStrategy strategy = IStrategy(_strategy);
 
-        if (totalShares[_strategy] == 0) {
+        uint256 totalShares = totalShares[_strategy];
+
+        (uint256 aumamount0, uint256 aumamount1) = getAUM(_strategy);
+
+        uint256 totalAmount0 = _totalAmount0;
+        uint256 totalAmount1 = _totalAmount1;
+
+        if (totalShares == 0) {
             share = Math.max(_amount0, _amount1);
+        } else if (totalAmount0 == 0) {
+            share = _amount1.mul(totalShares).div(totalAmount1);
+        } else if (totalAmount1 == 0) {
+            share = _amount0.mul(totalShares).div(totalAmount0);
         } else {
-            share = uint256(_liquidityAfter)
-            .sub(uint256(_liquidityBefore))
-            .mul(totalShares[_strategy])
-            .div(uint256(_liquidityBefore));
+            uint256 cross = Math.max(
+                _amount0.mul(totalAmount1),
+                _amount1.mul(totalAmount0)
+            );
+            require(cross > 0, "cross");
+            share = cross.mul(totalShares).div(totalAmount0).div(totalAmount1);
         }
 
         // strategy owner fees
@@ -170,12 +183,10 @@ contract AggregatorManagement is AggregatorBase {
             share = share.sub(fee);
             // issue fee
             mintShare(_strategy, fee, feeTo);
-            // issue shares
-            mintShare(_strategy, share, _user);
-        } else {
-            // update shares w.r.t. strategy
-            mintShare(_strategy, share, _user);
         }
+
+        // issue shares
+        mintShare(_strategy, share, _user);
     }
 
     /**
@@ -276,5 +287,32 @@ contract AggregatorManagement is AggregatorBase {
             strategySnapshot.ticks[_tickId].amount0.sub(_amount0),
             strategySnapshot.ticks[_tickId].amount1.sub(_amount1)
         );
+    }
+
+    /**
+     * @notice Gets assets under management for specific strategy
+     * @param _strategy Address of the strategy contract
+     */
+    function getAUM(address _strategy)
+        public
+        view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        Strategy memory strategy = strategies[_strategy];
+        UnusedAmounts memory unusedAmounts = unused[_strategy];
+
+        uint256 totalAmount0;
+        uint256 totalAmount1;
+
+        // add amounts from different ranges
+        for (uint256 i = 0; i < strategy.ticks.length; i++) {
+            IStrategy.Tick memory tick = strategy.ticks[i];
+            totalAmount0 = totalAmount0.add(tick.amount0);
+            totalAmount1 = totalAmount1.add(tick.amount1);
+        }
+
+        // add unused amounts
+        amount0 = totalAmount0.add(unusedAmounts.amount0);
+        amount1 = totalAmount1.add(unusedAmounts.amount1);
     }
 }

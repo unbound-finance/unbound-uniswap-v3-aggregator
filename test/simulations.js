@@ -22,6 +22,8 @@ let SwapRouter;
 let userA;
 let userB;
 
+let feeTo;
+
 let LiquidityHelper;
 
 // import artifacts
@@ -51,7 +53,7 @@ let secondaryTickUpper;
 let swapRouter;
 
 beforeEach(async () => {
-  [owner, userA, userB] = await ethers.getSigners();
+  [owner, userA, userB, feeTo] = await ethers.getSigners();
 
   await loadContracts();
   await deployTestTokens();
@@ -120,6 +122,14 @@ beforeEach(async () => {
   await token0.approve(aggregator.address, approveAmt);
   await token1.approve(aggregator.address, approveAmt);
 
+  // approve tokens for aggregator
+  await token0.connect(userA).approve(aggregator.address, approveAmt);
+  await token1.connect(userA).approve(aggregator.address, approveAmt);
+
+  // approve tokens for aggregator
+  await token0.transfer(userA.address, "1000000000000000000000000");
+  await token1.transfer(userA.address, "1000000000000000000000000");
+
   // // adds 5000 token0 and 16580085.099454967 token1
 
   // await aggregator
@@ -155,31 +165,139 @@ describe("🟢  Swap", function () {
         0
       );
     const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
-    const sqrtPriceLimitX96 = sqrtRatioX96 - (sqrtRatioX96 * 10) / 100;
-    
-    console.log("before token0", await pool.feeGrowthGlobal0X128())
-    console.log("before token1", await pool.feeGrowthGlobal1X128())
+    const sqrtPriceLimitX96 =
+      parseInt(sqrtRatioX96) + parseInt(sqrtRatioX96) * 0.5;
+
+    const sqrtPriceLimitX96New =
+      parseInt(sqrtRatioX96) - parseInt(sqrtRatioX96) * 0.5;
+
+    console.log("before token0", await pool.feeGrowthGlobal0X128());
+    console.log("before token1", await pool.feeGrowthGlobal1X128());
+
+    await swapRouter.swap(
+      pool.address,
+      false,
+      "350000000000000000000",
+      toGwei(sqrtPriceLimitX96 / 1e18)
+    );
 
     await swapRouter.swap(
       pool.address,
       true,
       "10000000000000000000",
-      toGwei(sqrtPriceLimitX96 / 1e18)
+      toGwei(sqrtPriceLimitX96New / 1e18)
     );
 
-    console.log("after token0", await pool.feeGrowthGlobal0X128())
-    console.log("after token1", await pool.feeGrowthGlobal1X128())
+    console.log("after token0", await pool.feeGrowthGlobal0X128());
+    console.log("after token1", await pool.feeGrowthGlobal1X128());
 
     const ticks = await aggregator.getTicks(strategy1.address);
 
-    await strategy1.rebalance("0", "0", "0", false, [
-      [
-        "5000000000000000000",
-        "17500000000000000000000",
-        secondaryTickLower,
-        secondaryTickUpper,
-      ],
-    ]);
+    const shares = await aggregator.shares(strategy1.address, owner.address);
+
+    console.log({ shares });
+
+    // await aggregator.removeLiquidity(
+    //   strategy1.address,
+    //   (5000 * 1e18).toLocaleString("fullwide", { useGrouping: false }),
+    //   0,
+    //   0
+    // );
+
+    // await swapRouter.swap(
+    //   pool.address,
+    //   false,
+    //   "350000000000000000000",
+    //   toGwei(sqrtPriceLimitX96 / 1e18)
+    // );
+
+    // await swapRouter.swap(
+    //   pool.address,
+    //   true,
+    //   "10000000000000000000",
+    //   toGwei(sqrtPriceLimitX96New / 1e18)
+    // );
+
+    // await aggregator.removeLiquidity(
+    //   strategy1.address,
+    //   (5000 * 1e18).toLocaleString("fullwide", { useGrouping: false }),
+    //   0,
+    //   0
+    // );
+
+    // const liquidityHelper = await LiquidityHelper.deploy();
+    // const amounts = await liquidityHelper.getAmountsForLiquidityTest(
+    //   (4.682969311540855e30).toLocaleString("fullwide", {
+    //     useGrouping: false,
+    //   }),
+    //   80100,
+    //   82980,
+    //   "116315382101736390000"
+    // );
+
+    await strategy1.changeFeeTo(feeTo.address);
+    await strategy1.changeFee(0);
+
+    console.log("liquiidity adding");
+
+    await aggregator
+      .connect(userA)
+      .addLiquidity(
+        strategy1.address,
+        "10000000000000000000",
+        "17580085099454966736264154",
+        0,
+        0,
+        0
+      );
+
+    console.log("liquiidity added");
+
+    // await strategy1.rebalance("0", "0", "0", false, [
+    //   [
+    //     "1000000000000000000",
+    //     "35000000000000000000000",
+    //     calculateTick(2600, 60),
+    //     calculateTick(3300, 60),
+    //   ],
+    //   [
+    //     "1000000000000000000",
+    //     "35000000000000000000000",
+    //     calculateTick(2300, 60),
+    //     calculateTick(3700, 60),
+    //   ],
+    // ]);
+
+    // await strategy1.rebalance("0", "0", "0", false, [
+    //   [
+    //     "5000000000000000000",
+    //     "17500000000000000000000",
+    //     secondaryTickLower,
+    //     secondaryTickUpper,
+    //   ],
+    // ]);
+
+    // await strategy1.rebalance("0", "0", "0", false, [
+    //   [
+    //     "5000000000000000000",
+    //     "17500000000000000000000",
+    //     secondaryTickLower,
+    //     secondaryTickUpper,
+    //   ],
+    // ]);
+
+    const fee = await aggregator.shares(strategy1.address, userA.address);
+
+    console.log({ fee });
+
+    console.log(
+      "fee collected",
+      await aggregator.shares(strategy1.address, owner.address)
+    );
+
+    await aggregator
+      .connect(userA)
+      .removeLiquidity(strategy1.address, fee, 0, 0);
   });
 
   it("updates unused amounts matching with contract balance", async () => {

@@ -8,7 +8,7 @@ bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 });
 const config = require("./config");
 
 async function main() {
-  const factoryAddress = config.factoryAddress;
+  const factoryAddress = config.uniswapFactory;
 
   const tokens = {
     dai: config.dai,

@@ -83,9 +83,8 @@ contract Aggregator is UniswapPoolActions {
         // require(strategy.initialized(), "not initilized");
         require(strategy.initialized(), "uninitialised strategy");
 
-        // get liquidity before adding the new liqudiity
-        uint128 liquidityBefore = getCurrentLiquidityWithFees(
-            address(pool),
+        // get total amounts with fees
+        (uint256 totalAmount0, uint256 totalAmount1) = getAUMWithFees(
             _strategy
         );
 
@@ -99,19 +98,13 @@ contract Aggregator is UniswapPoolActions {
             msg.sender
         );
 
-        // get liquidity value after adding liquidity of the user
-        uint128 liquidityAfter = LiquidityHelper.getCurrentLiquidity(
-            address(pool),
-            _strategy
-        );
-
         // issue share based on the liquidity added
         share = issueShare(
             _strategy,
             amount0,
             amount1,
-            liquidityBefore,
-            liquidityAfter,
+            totalAmount0,
+            totalAmount1,
             msg.sender
         );
 
@@ -225,8 +218,10 @@ contract Aggregator is UniswapPoolActions {
      */
     function rebalance(address _strategy)
         external
-        returns (uint256 amount0, uint256 amount1)
+        returns (IStrategy.Tick[] memory _ticks)
     {
+        uint256 amount0;
+        uint256 amount1;
         // check if rebalance is getting called from strategy contract or not
         require(IStrategyFactory(factory).isValid(msg.sender));
 
@@ -236,7 +231,6 @@ contract Aggregator is UniswapPoolActions {
         Strategy storage strategySnapshot = strategies[_strategy];
 
         uint128 liquidity;
-
         // if hold is activated in strategy, strategy will burn the funds and hold
         if (strategy.onHold()) {
             // burn liquidity
@@ -275,6 +269,8 @@ contract Aggregator is UniswapPoolActions {
                 collect0.add(unusedAmount0),
                 collect1.add(unusedAmount1)
             );
+
+            _ticks = strategySnapshot.ticks;
 
             // emit rebalance event
             emit Rebalance(_strategy, strategySnapshot.ticks);
@@ -486,33 +482,6 @@ contract Aggregator is UniswapPoolActions {
     {
         Strategy storage strategy = strategies[_strategy];
         return strategy.ticks;
-    }
-
-    /**
-     * @notice Gets assets under management for specific strategy
-     * @param _strategy Address of the strategy contract
-     */
-    function getAUM(address _strategy)
-        public
-        view
-        returns (uint256 amount0, uint256 amount1)
-    {
-        Strategy memory strategy = strategies[_strategy];
-        UnusedAmounts memory unusedAmounts = unused[_strategy];
-
-        uint256 totalAmount0;
-        uint256 totalAmount1;
-
-        // add amounts from different ranges
-        for (uint256 i = 0; i < strategy.ticks.length; i++) {
-            IStrategy.Tick memory tick = strategy.ticks[i];
-            totalAmount0 = totalAmount0.add(tick.amount0);
-            totalAmount1 = totalAmount1.add(tick.amount1);
-        }
-
-        // add unused amounts
-        amount0 = totalAmount0.add(unusedAmounts.amount0);
-        amount1 = totalAmount1.add(unusedAmounts.amount1);
     }
 
     /**

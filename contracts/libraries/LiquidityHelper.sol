@@ -10,6 +10,7 @@ import "../interfaces/IStrategy.sol";
 
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
+import "hardhat/console.sol";
 
 library LiquidityHelper {
     using SafeMath for uint256;
@@ -44,7 +45,6 @@ library LiquidityHelper {
         );
     }
 
-    // TODO: Change this function to internal
     /**
      * @notice Calculates the liquidity amount using current ranges
      * @param _pool Address of the pool
@@ -57,7 +57,7 @@ library LiquidityHelper {
         int24 _tickLower,
         int24 _tickUpper,
         uint128 _liquidity
-    ) external view returns (uint256 amount0, uint256 amount1) {
+    ) internal view returns (uint256 amount0, uint256 amount1) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         // get sqrtRatios required to calculate liquidity
@@ -72,6 +72,22 @@ library LiquidityHelper {
         );
     }
 
+    // // TODO: Remove this
+    // function getAmountsForLiquidityTest(
+    //     uint160 sqrtRatioX96,
+    //     int24 _tickLower,
+    //     int24 _tickUpper,
+    //     uint128 _liquidity
+    // ) external view returns (uint256 amount0, uint256 amount1) {
+
+    //     // calculate liquidity needs to be added
+    //     (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
+    //         sqrtRatioX96,
+    //         TickMath.getSqrtRatioAtTick(_tickLower),
+    //         TickMath.getSqrtRatioAtTick(_tickUpper),
+    //         _liquidity
+    //     );
+    // }
 
     /**
      * @dev Get the liquidity between current ticks
@@ -89,14 +105,13 @@ library LiquidityHelper {
         for (uint256 i = 0; i < strategy.tickLength(); i++) {
             IStrategy.Tick memory tick = strategy.ticks(i);
 
-            (uint128 currentLiquidity, , , , ) =
-                pool.positions(
-                    PositionKey.compute(
-                        address(this),
-                        tick.tickLower,
-                        tick.tickUpper
-                    )
-                );
+            (uint128 currentLiquidity, , , , ) = pool.positions(
+                PositionKey.compute(
+                    address(this),
+                    tick.tickLower,
+                    tick.tickUpper
+                )
+            );
             liquidity = liquidity + currentLiquidity;
         }
     }
