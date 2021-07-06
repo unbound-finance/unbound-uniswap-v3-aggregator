@@ -6,6 +6,9 @@ pragma abicoder v2;
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+
+import "hardhat/console.sol";
 
 interface IAggregator {
     function rebalance(address _strategy) external;
@@ -66,12 +69,12 @@ contract DefiEdgeStrategy {
         require(initialized, "Ownable: strategy not initialized");
         _;
     }
-        
-     //Not required as on 64 line we are using onlyOperator modifier as veryfying
-    // Checks if sender is operator 
-   // function isOperator() internal view returns (bool) {
-   //     return msg.sender == operator;
-   // }
+
+    //Not required as on 64 line we are using onlyOperator modifier as veryfying
+    // Checks if sender is operator
+    // function isOperator() internal view returns (bool) {
+    //     return msg.sender == operator;
+    // }
 
     /**
      * @dev Replaces old ticks with new ticks
@@ -115,6 +118,7 @@ contract DefiEdgeStrategy {
      */
     function initialize(Tick[] memory _ticks) external onlyOperator {
         require(!initialized, "strategy already initialised");
+        IUniswapV3Pool currentPool = IUniswapV3Pool(pool);
         initialized = true;
         for (uint256 i = 0; i < _ticks.length; i++) {
             ticks.push(Tick(0, 0, _ticks[i].tickLower, _ticks[i].tickUpper));

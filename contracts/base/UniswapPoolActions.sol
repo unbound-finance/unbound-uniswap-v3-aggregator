@@ -18,7 +18,6 @@ import "../interfaces/IStrategy.sol";
 
 import "../base/AggregatorManagement.sol";
 
-
 contract UniswapPoolActions is
     AggregatorManagement,
     IUniswapV3MintCallback,

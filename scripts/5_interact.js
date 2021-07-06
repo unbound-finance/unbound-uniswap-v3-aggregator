@@ -13,31 +13,48 @@ async function main() {
   console.log("⭐  Interaction Started");
 
   const addresses = {
-    aggregator: "0x230b8D438CD0208F549479c51F332e59A727f5f7",
+    aggregator: "0xFF3E4153eC40fDF7A8D6cAbEa79093a04a0FfF8E",
     dai: "0xdbdBc8fd9117872D64a9dA8ab6c9Ae243e45B844",
     eth: "0x98E652945f92817a924127AEdFB078261490C3fe",
     pool: "0x737FC2b8DA21e79000D30641E459e79823e7D1ec",
-    strategy: "0x0704DfaA0CA872Cf3Ed38cD6741cf9faf92e6953",
+    strategy: "0x839A70C2678fB6CC55F9DFd8d5EAd7f34A938a90",
   };
 
   aggregator = await ethers.getContractAt("Aggregator", addresses.aggregator);
 
-  const dai = await ethers.getContractAt("ERC20", config.dai);
-  const eth = await ethers.getContractAt("ERC20", config.eth);
+  // const dai = await ethers.getContractAt("ERC20", config.dai);
+  // const eth = await ethers.getContractAt("ERC20", config.eth);
 
-  const balanceOfDai = await dai.balanceOf(config.owner);
-  const balanceOfEth = await dai.balanceOf(config.owner);
+  // const balanceOfDai = await dai.balanceOf(config.owner);
+  // const balanceOfEth = await dai.balanceOf(config.owner);
 
-  await dai.approve(aggregator.address, balanceOfDai);
-  await eth.approve(aggregator.address, balanceOfEth);
+  // await dai.approve(aggregator.address, balanceOfDai);
+  // await eth.approve(aggregator.address, balanceOfEth);
 
-  pool = await ethers.getContractAt("UniswapV3Pool", config.pool);
+  pool = await ethers.getContractAt("UniswapV3Pool", addresses.pool);
 
   strategy = await ethers.getContractAt("DefiEdgeStrategy", addresses.strategy);
 
+  const feeTo = await aggregator.feeTo();
+  const feeToStrategy = await strategy.feeTo()
+
+  console.log("feeTo from strategy", await strategy.feeTo());
+  console.log("feeTo from operator", await aggregator.feeTo());
+  console.log(
+    "shares of protocol",
+    await aggregator.shares(strategy.address, feeTo)
+  );
+  console.log(
+    "shares of stratergy",
+    await aggregator.shares(strategy.address, feeToStrategy)
+  );
+  // await aggregator.changeFee("1000000");
+  // await aggregator.changeFeeTo("0x64bC0E807066f20Ca466897624D3fbb6f0EC5D44");
 
   // await changeFeeTo();
   // await changeFee();
+  // await increaseObservationCardinalityNext()
+
   // await addLiquidity(strategy.address);
 
   // // await rebalance(strategy.address)
@@ -73,29 +90,39 @@ async function main() {
   //   console.log("✅ strategy initialised");
 
   // await addLiquidity(strategy.address);
-  // const price = await pool.slot0()
+  // const price = await pool.slot0();
   // console.log(price);
-  // console.log({
-  //   tickLower,
-  //   tickUpper,
-  // });
-  // const positionKey = getPositionKey(aggregator.address, tickLower, tickUpper);
+  // const positionKey = getPositionKey(aggregator.address, "-77340", "-75000");
   // const position = await pool.positions(positionKey);
 
-  // console.log(position);
+  // const tx = await aggregator.emergencyBurn(pool.address, "-77280", "-76320")
+
+  // const tx = await aggregator.emergencyWithdraw(
+  //   ,
+  //   "844580000000000000000",
+  //   "400000000000000"
+  // );
+  // console.log(tx);
 
   // await changeFee();
 
   // console.log contract config
+
+  // await rebalance(strategy.address);
   console.log("🎉 interaction complete");
   console.log({
     strategy: strategy.address,
   });
 }
 
+async function increaseObservationCardinalityNext() {
+  const tx = await pool.increaseObservationCardinalityNext(65);
+  console.log(tx);
+}
+
 async function changeFeeTo() {
   const tx = await strategy.changeFeeTo(
-    "0x9e6f52B7835712686F870d5f8359c00537e276c6"
+    "0xe23982a74B2f969d8867bef0a108552C6C5C2E25"
   );
   console.log(tx);
 }
@@ -123,7 +150,7 @@ async function rebalance(_strategy) {
     toGwei(sqrtPriceLimitX96 / 1e18),
     "1000000",
     true,
-    [[toGwei(22.10276257899523), toGwei(0.001627392823741774), -75960, -82920]]
+    [[toGwei(22000.10276257899523), toGwei(1), 75960, 82920]]
   );
 
   console.log(tx);
@@ -136,7 +163,7 @@ async function addLiquidity(_strategy) {
     "100000000000000000000000000",
     "0",
     "0",
-    "0",
+    "0"
   );
   console.log(tx);
 }

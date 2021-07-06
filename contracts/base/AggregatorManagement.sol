@@ -5,9 +5,16 @@ pragma abicoder v2;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 
+import "../libraries/UniswapV3Oracle.sol";
+
 import "./AggregatorBase.sol";
 
 import "../interfaces/IStrategy.sol";
+
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+
+// TODO: Remove this:
+import "hardhat/console.sol";
 
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
@@ -130,6 +137,28 @@ contract AggregatorManagement is AggregatorBase {
         emit MintShare(_strategy, _to, _shares);
     }
 
+    function calculateShares(
+        address _pool,
+        address _strategy,
+        uint256 _amount0,
+        uint256 _amount1,
+        uint256 _totalAmount0,
+        uint256 _totalAmount1
+    ) internal returns (uint256 share) {
+        uint256 totalShares = totalShares[_strategy];
+        uint256 price = UniswapV3Oracle.consult(_pool, 60);
+
+        if (_totalAmount0 == 0) {
+            share = (_amount1.mul(price).add(_amount0)).div(1000);
+        } else if (_totalAmount1 == 0) {
+            share = (_amount0.mul(price).add(_amount1)).div(1000);
+        } else {
+            share = totalShares.mul(((_amount0).mul(price).add(_amount1))).div(
+                _totalAmount0.mul(price).add(_totalAmount1)
+            );
+        }
+    }
+
     /**
      * @notice Updates the shares of the user
      * @param _strategy Address of the strategy
@@ -149,25 +178,19 @@ contract AggregatorManagement is AggregatorBase {
     ) internal returns (uint256 share) {
         IStrategy strategy = IStrategy(_strategy);
 
-        uint256 totalShares = totalShares[_strategy];
+        // // TODO: implement oracle here
+        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
 
-        uint256 totalAmount0 = _totalAmount0;
-        uint256 totalAmount1 = _totalAmount1;
+        share = calculateShares(
+            address(pool),
+            _strategy,
+            _amount0,
+            _amount1,
+            _totalAmount0,
+            _totalAmount1
+        );
 
-        if (totalShares == 0) {
-            share = Math.max(_amount0, _amount1);
-        } else if (totalAmount0 == 0) {
-            share = _amount1.mul(totalShares).div(totalAmount1);
-        } else if (totalAmount1 == 0) {
-            share = _amount0.mul(totalShares).div(totalAmount0);
-        } else {
-            uint256 cross = Math.max(
-                _amount0.mul(totalAmount1),
-                _amount1.mul(totalAmount0)
-            );
-            require(cross > 0, "cross");
-            share = cross.mul(totalShares).div(totalAmount0).div(totalAmount1);
-        }
+        require(share > 0, "invalid shares");
 
         // strategy owner fees
         if (strategy.feeTo() != address(0) && strategy.managementFee() > 0) {
@@ -178,9 +201,8 @@ contract AggregatorManagement is AggregatorBase {
 
         if (feeTo != address(0)) {
             uint256 fee = share.mul(PROTOCOL_FEE).div(1e8);
-            share = share.sub(fee);
-            // issue fee
             mintShare(_strategy, fee, feeTo);
+            share = share.sub(fee);
         }
 
         // issue shares

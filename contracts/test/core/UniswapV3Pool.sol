@@ -628,8 +628,6 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
         bool exactInput = amountSpecified > 0;
 
-        // console.log("exactInput",exactInput);
-
         SwapState memory state =
             SwapState({
                 amountSpecifiedRemaining: amountSpecified,

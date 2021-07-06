@@ -117,6 +117,7 @@ contract Aggregator is UniswapPoolActions {
             "Aggregator: Slippage"
         );
 
+        // increase used amounts 
         increaseUsedAmounts(_strategy, 0, amount0, amount1);
 
         emit AddLiquidity(_strategy, amount0, amount1);

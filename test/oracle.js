@@ -54,10 +54,8 @@ let swapRouter;
 
 beforeEach(async () => {
   [owner, userA, userB, feeTo] = await ethers.getSigners();
-
   await loadContracts();
   await deployTestTokens();
-
   // create and initialize the pool
   uniswapFactory = await UniswapV3Factory.deploy();
   await uniswapFactory.createPool(token0.address, token1.address, "3000");
@@ -66,18 +64,13 @@ beforeEach(async () => {
     token1.address,
     "3000"
   );
-
   console.log("pool address from the script", poolAddress);
   pool = await ethers.getContractAt("UniswapV3Pool", poolAddress);
-
   let sqrtPriceX96 = encodePriceSqrt("500000", "1500000000");
-
   sqrtPriceX96 = sqrtPriceX96.toLocaleString("fullwide", {
     useGrouping: false,
   });
-
   await pool.initialize(sqrtPriceX96);
-
   // set token0 and token1 accordinfg to the pool
   if (token1.address < token0.address) {
     const oldToken0 = token0;
@@ -85,53 +78,67 @@ beforeEach(async () => {
     token0 = oldToken1;
     token1 = oldToken0;
   }
-
   // deploy aggregator contract
   aggregator = await Aggregator.deploy(owner.address);
-
   // add some liquidity in the pool
   // deploy strategy contract
-
   const strategyFactory = await StrategyFactory.deploy(aggregator.address);
   await aggregator.addFactory(strategyFactory.address);
-
   await strategyFactory.createStrategy(pool.address, owner.address);
-
   await strategyFactory.createStrategy(pool.address, owner.address);
-
   const _strategy0 = await strategyFactory.strategyByIndex(1);
-
   const _strategy1 = await strategyFactory.strategyByIndex(2);
-
   strategy0 = await ethers.getContractAt("DefiEdgeStrategy", _strategy0);
-
   strategy1 = await ethers.getContractAt("DefiEdgeStrategy", _strategy1);
-
   // add initial liquidity to start the pool
   tickLower = calculateTick(2500, 60);
   tickUpper = calculateTick(3500, 60);
   secondaryTickLower = calculateTick(2700, 60);
   secondaryTickUpper = calculateTick(3300, 60);
-
   await strategy0.initialize([[0, 0, tickLower, tickUpper]]);
   await strategy1.initialize([[0, 0, secondaryTickLower, secondaryTickUpper]]);
-
   const approveAmt = "100000000000000000000000000000";
+  // approve tokens for aggregator
+  await token0.approve(aggregator.address, approveAmt);
+  await token1.approve(aggregator.address, approveAmt);
+  // approve tokens for aggregator
+  await token0.connect(userA).approve(aggregator.address, approveAmt);
+  await token1.connect(userA).approve(aggregator.address, approveAmt);
+  // approve tokens for aggregator
+  await token0.transfer(userA.address, "1000000000000000000000000");
+  await token1.transfer(userA.address, "1000000000000000000000000");
 
   // approve tokens for aggregator
   await token0.approve(aggregator.address, approveAmt);
   await token1.approve(aggregator.address, approveAmt);
 
+  swapRouter = await SwapRouter.deploy();
   // approve tokens for aggregator
-  await token0.connect(userA).approve(aggregator.address, approveAmt);
-  await token1.connect(userA).approve(aggregator.address, approveAmt);
+  await token0.approve(swapRouter.address, approveAmt);
+  await token1.approve(swapRouter.address, approveAmt);
 
-  // approve tokens for aggregator
-  await token0.transfer(userA.address, "1000000000000000000000000");
-  await token1.transfer(userA.address, "1000000000000000000000000");
+  await swapRouter.mintLiquidity(
+    pool.address,
+    tickLower,
+    tickUpper,
+    "10000000000000000000000000",
+    "10000000000000000000000000",
+    owner.address
+  );
 
   // // adds 5000 token0 and 16580085.099454967 token1
 
+  //   await aggregator
+  //     .connect(owner)
+  //     .addLiquidity(
+  //       strategy0.address,
+  //       "5000000000000000000000",
+  //       "1500000000000000000000000000",
+  //       0,
+  //       0,
+  //       0
+  //     );
+  // // adds 5000 token0 and 16580085.099454967 token1
   // await aggregator
   //   .connect(owner)
   //   .addLiquidity(
@@ -143,47 +150,50 @@ beforeEach(async () => {
   //     0
   //   );
 
-  console.log("uniswap factory address", uniswapFactory.address);
-  swapRouter = await SwapRouter.deploy();
+  // swap tokens
+  const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
+  const sqrtPriceLimitX96 =
+    parseInt(sqrtRatioX96) + parseInt(sqrtRatioX96) * 0.9;
+  const sqrtPriceLimitX96New =
+    parseInt(sqrtRatioX96) - parseInt(sqrtRatioX96) * 0.9;
+  // await swapRouter.swap(
+  //   pool.address,
+  //   false,
+  //   "350000000000000000000",
+  //   toGwei(sqrtPriceLimitX96 / 1e18)
+  // );
+  // await ethers.provider.send("evm_increaseTime", [10]);
+  // await swapRouter.swap(
+  //   pool.address,
+  //   false,
+  //   "10000000000000000000",
+  //   toGwei(sqrtPriceLimitX96New / 1e18)
+  // );
 
-  // approve tokens for aggregator
-  await token0.approve(swapRouter.address, approveAmt);
-  await token1.approve(swapRouter.address, approveAmt);
+  // increase cardinary
+  await pool.increaseObservationCardinalityNext(65);
 
+  let slot0;
+  slot0 = await pool.slot0();
   // increase oracle space
-  await pool.increaseObservationCardinalityNext(2000)
+  await swapRouter.swap(
+    pool.address,
+    true,
+    "10000000000000000000",
+    toGwei(sqrtPriceLimitX96New / 1e18)
+  );
+
+  slot0 = await pool.slot0();
 });
 
-describe("🟢  Swap", function () {
-  beforeEach("add and rebalance pair", async () => {
-    // adds 10 and 31630.148889005883
-    await aggregator
-      .connect(owner)
-      .addLiquidity(
-        strategy1.address,
-        "10000000000000000000",
-        "17580085099454966736264154",
-        0,
-        0,
-        0
-      );
+describe("🟢  Oracle Test", function () {
+  beforeEach("Tests Oracle", async () => {
     const sqrtRatioX96 = (await pool.slot0()).sqrtPriceX96;
-    const sqrtPriceLimitX96 =
-      parseInt(sqrtRatioX96) + parseInt(sqrtRatioX96) * 0.5;
 
     const sqrtPriceLimitX96New =
-      parseInt(sqrtRatioX96) - parseInt(sqrtRatioX96) * 0.5;
+      parseInt(sqrtRatioX96) - parseInt(sqrtRatioX96) * 0.9;
 
-    console.log("before token0", await pool.feeGrowthGlobal0X128());
-    console.log("before token1", await pool.feeGrowthGlobal1X128());
-
-    await swapRouter.swap(
-      pool.address,
-      false,
-      "350000000000000000000",
-      toGwei(sqrtPriceLimitX96 / 1e18)
-    );
-
+    await ethers.provider.send("evm_increaseTime", [65]);
     await swapRouter.swap(
       pool.address,
       true,
@@ -191,126 +201,118 @@ describe("🟢  Swap", function () {
       toGwei(sqrtPriceLimitX96New / 1e18)
     );
 
-    console.log("after token0", await pool.feeGrowthGlobal0X128());
-    console.log("after token1", await pool.feeGrowthGlobal1X128());
+    const oracle = await pool.observe([10, 0]);
+    console.log("original miyn");
 
-    const ticks = await aggregator.getTicks(strategy1.address);
+    await aggregator.addLiquidity(
+      strategy1.address,
+      "1000000000000000000",
+      "3500000000000000000000",
+      0,
+      0,
+      0
+    );
 
-    const shares = await aggregator.shares(strategy1.address, owner.address);
+    await strategy1.rebalance("0", 0, "1000000", true, [
+      [
+        "100000000000000000",
+        "35000000000000000000",
+        calculateTick(2600, 60),
+        calculateTick(2800, 60),
+      ],
+    ]);
 
-    console.log({ shares });
-
-    // await aggregator.removeLiquidity(
-    //   strategy1.address,
-    //   (5000 * 1e18).toLocaleString("fullwide", { useGrouping: false }),
-    //   0,
-    //   0
-    // );
-
-    // await swapRouter.swap(
-    //   pool.address,
-    //   false,
-    //   "350000000000000000000",
-    //   toGwei(sqrtPriceLimitX96 / 1e18)
-    // );
-
-    // await swapRouter.swap(
-    //   pool.address,
-    //   true,
-    //   "10000000000000000000",
-    //   toGwei(sqrtPriceLimitX96New / 1e18)
-    // );
-
-    // await aggregator.removeLiquidity(
-    //   strategy1.address,
-    //   (5000 * 1e18).toLocaleString("fullwide", { useGrouping: false }),
-    //   0,
-    //   0
-    // );
-
-    // const liquidityHelper = await LiquidityHelper.deploy();
-    // const amounts = await liquidityHelper.getAmountsForLiquidityTest(
-    //   (4.682969311540855e30).toLocaleString("fullwide", {
-    //     useGrouping: false,
-    //   }),
-    //   80100,
-    //   82980,
-    //   "116315382101736390000"
-    // );
-
+    console.log("feeToAddress", await strategy1.feeTo());
+    // enable share
     await strategy1.changeFeeTo(feeTo.address);
-    await strategy1.changeFee(0);
+    await strategy1.changeFee(2);
 
-    console.log("liquiidity adding");
-
+    console.log("add liquidity for userA");
     await aggregator
       .connect(userA)
       .addLiquidity(
         strategy1.address,
-        "10000000000000000000",
-        "17580085099454966736264154",
+        "1000000000000000000",
+        "3500000000000000000000",
         0,
         0,
         0
       );
 
-    console.log("liquiidity added");
-
-    // await strategy1.rebalance("0", "0", "0", false, [
-    //   [
-    //     "1000000000000000000",
-    //     "35000000000000000000000",
-    //     calculateTick(2600, 60),
-    //     calculateTick(3300, 60),
-    //   ],
-    //   [
-    //     "1000000000000000000",
-    //     "35000000000000000000000",
-    //     calculateTick(2300, 60),
-    //     calculateTick(3700, 60),
-    //   ],
-    // ]);
-
-    // await strategy1.rebalance("0", "0", "0", false, [
-    //   [
-    //     "5000000000000000000",
-    //     "17500000000000000000000",
-    //     secondaryTickLower,
-    //     secondaryTickUpper,
-    //   ],
-    // ]);
-
-    // await strategy1.rebalance("0", "0", "0", false, [
-    //   [
-    //     "5000000000000000000",
-    //     "17500000000000000000000",
-    //     secondaryTickLower,
-    //     secondaryTickUpper,
-    //   ],
-    // ]);
-
-    const fee = await aggregator.shares(strategy1.address, userA.address);
-
-    console.log({ fee });
-
-    console.log(
-      "fee collected",
-      await aggregator.shares(strategy1.address, owner.address)
+    const feeToShares = await aggregator.shares(
+      strategy1.address,
+      feeTo.address
     );
+
+    console.log({
+      feeToShares: feeToShares.toString(),
+    });
+
+    const shares = await aggregator.shares(strategy1.address, feeTo.address);
+    const aum = await aggregator.getAUM(strategy1.address);
+    const totalShares = await aggregator.totalShares(strategy1.address);
+    console.log({
+      sharesOfUserA: shares.toString(),
+      totalAmount0: aum.amount0.toString(),
+      totalAmount1: aum.amount1.toString(),
+      totalShares: totalShares.toString(),
+    });
+
+    console.log("remove for feeTo");
+    await aggregator
+      .connect(feeTo)
+      .removeLiquidity(strategy1.address, feeToShares, 0, 0);
+
+    console.log("remove for userA");
 
     await aggregator
       .connect(userA)
-      .removeLiquidity(strategy1.address, fee, 0, 0);
+      .addLiquidity(
+        strategy1.address,
+        "1000000000000000000",
+        "3500000000000000000000",
+        0,
+        0,
+        0
+      );
+
+    await aggregator
+      .connect(userA)
+      .removeLiquidity(strategy1.address, shares, 0, 0);
+
+    // try minting some dai
+    // const dai = await ethers.getContractAt(
+    //   "ERC20",
+    //   "0x6b175474e89094c44da98b954eedeac495271d0f"
+    // );
+    // // await dai.mint(owner.address, "100000000000000000000000");
+    // console.log(
+    //   "balance of dai",
+    //   (await dai.balanceOf(owner.address)).toString()
+    // );
+    // // get pool contract from mainnet
+    // const mainnetPool = await ethers.getContractAt(
+    //   "UniswapV3Pool",
+    //   "0xc2e9f25be6257c210d7adf0d4cd6e3e881ba25f8"
+    // );
+    // const slot0 = await mainnetPool.slot0();
+    // console.log(slot0);
+    // const oracle = await mainnetPool.observe([2340, 0]);
+    // console.log(oracle);
   });
 
   it("updates unused amounts matching with contract balance", async () => {
-    const unused = await aggregator.unused(strategy1.address);
-    expect(unused.amount0.toString()).to.equal(
-      await token0.balanceOf(aggregator.address)
-    );
-    expect(unused.amount1.toString()).to.equal(
-      await token1.balanceOf(aggregator.address)
-    );
+    await aggregator
+      .connect(owner)
+      .addLiquidity(
+        strategy0.address,
+        "5000000000000000000000",
+        "1500000000000000000000000000",
+        0,
+        0,
+        0
+      );
+    console.log("testing oracle script");
   });
 
   // TODO: Add test to deploy 100% liquidity in single order

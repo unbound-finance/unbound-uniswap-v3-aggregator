@@ -27,12 +27,12 @@ module.exports = {
     kovan: {
       url: `https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: [process.env.PRIVATE_KEY],
-      gasLimit: 10000000,
+      gasLimit: 10000000000,
     },
     mainnet: {
       url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: [process.env.MAINNET_PRIVATE_KEY],
-      gasLimit: 10000000,
+      gasLimit: 17000000,
       gasPrice: 25000000000,
     },
   },
