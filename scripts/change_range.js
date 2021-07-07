@@ -6,12 +6,18 @@ const hre = require("hardhat");
 bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 });
 
 async function main() {
+  const userA = "0x08DcE649f86AF45dA8648FaD31D1C33A617C52d1";
+  const userB = "0xa4f7269C56974322C35A092bcB9897C642B57298";
+
   const owner = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
   const factoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 
   const TestToken = await ethers.getContractFactory("ERC20");
-  const TestStrategy = await ethers.getContractFactory("TestStrategy");
-  const V3Aggregator = await ethers.getContractFactory("V3Aggregator");
+  const TestStrategy = await ethers.getContractFactory("DefiEdgeStrategy");
+
+  const StrategyFactory = await ethers.getContractFactory("StrategyFactory");
+
+  const Aggregator = await ethers.getContractFactory("Aggregator");
 
   const factory = await ethers.getContractAt(
     "UniswapV3Factory",
@@ -37,6 +43,12 @@ async function main() {
     "100000000000000000000000000000",
     owner
   );
+
+  await dai.transfer(userA, "10000000000000000000000000");
+  await eth.transfer(userA, "10000000000000000000000000");
+
+  await dai.transfer(userB, "10000000000000000000000000");
+  await eth.transfer(userB, "10000000000000000000000000");
 
   // create a pool
   await factory.createPool(dai.address, eth.address, 3000);
@@ -75,22 +87,34 @@ async function main() {
   console.log({ sqrtPriceX96 });
   await pool.initialize(sqrtPriceX96);
 
+  console.log("✅ pool initialized");
+
   const governance = "0x22CB224F9FA487dCE907135B57C779F1f32251D4";
 
   // deploy aggregator contract
-  const v3Aggregator = await V3Aggregator.deploy(governance);
+  const v3Aggregator = await Aggregator.deploy(governance);
+  console.log("✅ aggregator deployed");
 
-  // deploy strategy contract
-  const strategy = await TestStrategy.deploy(
-    tickLower,
-    tickUpper,
-    0,
-    0,
+  console.log(v3Aggregator.address);
+
+  const strategyFactory = await StrategyFactory.deploy(v3Aggregator.address);
+  console.log("✅ factory deployed");
+
+  await strategyFactory.createStrategy(
     pool.address,
-    "0",
-    owner,
-    v3Aggregator.address
-  );
+    owner
+  )
+  
+  const strategyAddress = await strategyFactory.getStrategyByIndex(0)
+
+  strategy = await ethers.getContractAt("DefiEdgeStrategy", strategyAddress);
+
+  console.log("✅ strategy deployed");
+
+  // intialize the strategy
+  await strategy.initialize([[0, 0, tickLower, tickUpper]]);
+
+  console.log("✅ strategy initialised");
 
   // console.log contract addresses
   console.log("🎉 Contracts Deployed");
@@ -100,6 +124,7 @@ async function main() {
     pool: pool.address,
     strategy: strategy.address,
     v3Aggregator: v3Aggregator.address,
+    factory: strategyFactory.address
   });
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.7.6;
+pragma solidity >=0.7.6;
 
 import './interfaces/IUniswapV3Pool.sol';
 
@@ -627,8 +627,6 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             });
 
         bool exactInput = amountSpecified > 0;
-
-        // console.log("exactInput",exactInput);
 
         SwapState memory state =
             SwapState({

@@ -1,12 +1,16 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity >=0.7.6;
+pragma solidity =0.7.6;
+pragma abicoder v2;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
+import "../interfaces/IStrategy.sol";
+
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
+import "hardhat/console.sol";
 
 library LiquidityHelper {
     using SafeMath for uint256;
@@ -53,7 +57,7 @@ library LiquidityHelper {
         int24 _tickLower,
         int24 _tickUpper,
         uint128 _liquidity
-    ) external view returns (uint256 amount0, uint256 amount1) {
+    ) internal view returns (uint256 amount0, uint256 amount1) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         // get sqrtRatios required to calculate liquidity
@@ -71,112 +75,27 @@ library LiquidityHelper {
     /**
      * @dev Get the liquidity between current ticks
      * @param _pool Address of the pool
-     * @param _tickLower Lower tick of the range
-     * @param _tickUpper Upper tick of the range
+     * @param _strategy Address of the strategy
      */
-    function getCurrentLiquidity(
-        address _pool,
-        int24 _tickLower,
-        int24 _tickUpper,
-        int24 _secondaryTickLower,
-        int24 _secondaryTickUpper
-    ) internal view returns (uint128 liquidity) {
+    function getCurrentLiquidity(address _pool, address _strategy)
+        internal
+        view
+        returns (uint128 liquidity)
+    {
+        IStrategy strategy = IStrategy(_strategy);
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
-        // get current liquidity for range order
-        (uint128 rangeOrderLiquidity, , , , ) =
-            pool.positions(
-                PositionKey.compute(address(this), _tickLower, _tickUpper)
-            );
+        for (uint256 i = 0; i < strategy.tickLength(); i++) {
+            IStrategy.Tick memory tick = strategy.ticks(i);
 
-        // get current liquidity for limit order
-        (uint128 limitOrderLiquidity, , , , ) =
-            pool.positions(
+            (uint128 currentLiquidity, , , , ) = pool.positions(
                 PositionKey.compute(
                     address(this),
-                    _secondaryTickLower,
-                    _secondaryTickUpper
+                    tick.tickLower,
+                    tick.tickUpper
                 )
             );
-
-        // add both liquiditys
-        liquidity = rangeOrderLiquidity + limitOrderLiquidity;
-    }
-
-    function getCurrentFeeGrowth(
-        address _pool,
-        int24 _tickLower,
-        int24 _tickUpper
-    )
-        internal
-        returns (
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128
-        )
-    {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-
-        // get current liquidity for range order
-    }
-
-    function getAccumulatedFees(
-        address _pool,
-        int24 _tickLower,
-        int24 _tickUpper
-    ) internal returns (uint128 amount0, uint128 amount1) {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-        // get current liquidity for range order
-        (, , , uint128 tokensOwed0, uint128 tokensOwed1) =
-            pool.positions(
-                PositionKey.compute(address(this), _tickLower, _tickUpper)
-            );
-
-        uint128 amount0Liquidity =
-            LiquidityAmounts.getLiquidityForAmount0(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                tokensOwed0
-            );
-
-        uint128 amount1Liquidity =
-            LiquidityAmounts.getLiquidityForAmount0(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                tokensOwed1
-            );
-
-        // get liquidity for amounts owned
-        (
-            ,
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128,
-            ,
-
-        ) =
-            pool.positions(
-                PositionKey.compute(address(this), _tickLower, _tickUpper)
-            );
-
-        // divide fee growth by liquidity
-        amount0Liquidity = uint128(feeGrowthInside0LastX128) / amount0Liquidity;
-        amount1Liquidity = uint128(feeGrowthInside1LastX128) / amount1Liquidity;
-
-        amount0 = uint128(
-            LiquidityAmounts.getAmount0ForLiquidity(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                amount0Liquidity
-            )
-        );
-
-        amount1 = uint128(
-            LiquidityAmounts.getAmount1ForLiquidity(
-                TickMath.getSqrtRatioAtTick(_tickLower),
-                TickMath.getSqrtRatioAtTick(_tickUpper),
-                amount1Liquidity
-            )
-        );
-
-        // convert the divided liquidity value to amounts and return amounts
+            liquidity = liquidity + currentLiquidity;
+        }
     }
 }

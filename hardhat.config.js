@@ -1,5 +1,5 @@
 require("@nomiclabs/hardhat-waffle");
-require('dotenv').config()
+require("dotenv").config();
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
@@ -21,24 +21,31 @@ module.exports = {
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true,
+      gas: 12000000,
+      blockGasLimit: 0x1fffffffffffff,
     },
     kovan: {
       url: `https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: [process.env.PRIVATE_KEY],
-      gasPrice: 50000000000,
-    }
+      gasLimit: 10000000000,
+    },
+    mainnet: {
+      url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: [process.env.MAINNET_PRIVATE_KEY],
+      gasLimit: 17000000,
+      gasPrice: 25000000000,
+    },
   },
   solidity: {
-    version: '0.7.6',
+    version: "0.7.6",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 1_000_000,
+        runs: 1_000,
       },
       metadata: {
-        bytecodeHash: 'none',
+        bytecodeHash: "none",
       },
     },
   },
 };
-

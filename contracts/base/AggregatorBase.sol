@@ -1,11 +1,12 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity >=0.7.6;
-
-// TODO: Add events on each interaction
+pragma solidity =0.7.6;
 
 contract AggregatorBase {
     // to update protocol fees
     address public governance;
+
+    // used for two step governance change
+    address public pendingGovernance;
 
     // to receive the fees
     address public feeTo;
@@ -18,16 +19,25 @@ contract AggregatorBase {
 
     // Modifiers
     modifier onlyGovernance() {
-        require(isOwner(), "Ownable: caller is not the owner");
+        require(msg.sender == governance, "Ownable: caller is not the owner");
         _;
     }
 
     /**
-     * @dev Change the fee setter's address
+     * @notice Change the fee setter's address
      * @param _governance New governance address
      */
     function changeGovernance(address _governance) external onlyGovernance {
-        governance = _governance;
+        require(_governance != address(0), "invalid governance address");
+        pendingGovernance = _governance;
+    }
+
+    /**
+     * @notice Accepts the governance
+     */
+    function acceptGovernance() external onlyGovernance {
+        require(msg.sender == pendingGovernance, "invalid match");
+        governance = pendingGovernance;
     }
 
     /**
@@ -40,23 +50,20 @@ contract AggregatorBase {
     }
 
     /**
-    * @dev Change fee receiver
-    * @param _feeTo New fee receiver
-    */
+     * @dev Change fee receiver
+     * @param _feeTo New fee receiver
+     */
     function changeFeeTo(address _feeTo) external onlyGovernance {
         feeTo = _feeTo;
     }
 
-    /**
-    * @dev Blacklists the strategy
-    * @param _strategy Address of the strategy
-    */
+    // blacklist strategy
     function blacklist(address _strategy) external onlyGovernance {
         blacklisted[_strategy] = true;
     }
 
-    // Checks if sender is owner
-    function isOwner() public view returns (bool) {
-        return msg.sender == governance;
+    // remove strategy from blacklist
+    function removeBlacklist(address _strategy) external onlyGovernance {
+        blacklisted[_strategy] = false;
     }
 }

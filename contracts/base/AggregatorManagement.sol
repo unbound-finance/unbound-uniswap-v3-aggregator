@@ -1,31 +1,30 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity >=0.7.6;
+pragma solidity =0.7.6;
+pragma abicoder v2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 
+import "../libraries/UniswapV3Oracle.sol";
+
 import "./AggregatorBase.sol";
 
-import "../interfaces/IUnboundStrategy.sol";
+import "../interfaces/IStrategy.sol";
 
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+
+// TODO: Remove this:
 import "hardhat/console.sol";
 
 contract AggregatorManagement is AggregatorBase {
     using SafeMath for uint256;
 
     struct Strategy {
-        uint256 amount0; // used amount0
-        uint256 amount1; // used amount1
-        uint256 secondaryAmount0;
-        uint256 secondaryAmount1;
-        int24 tickLower;
-        int24 tickUpper;
-        int24 secondaryTickLower;
-        int24 secondaryTickUpper;
-        bool swap;
+        IStrategy.Tick[] ticks;
         bool hold;
     }
 
+    // store strategy
     mapping(address => Strategy) public strategies;
 
     struct UnusedAmounts {
@@ -50,7 +49,7 @@ contract AggregatorManagement is AggregatorBase {
     // mapping of strategies with their total share
     mapping(address => uint256) public totalShares;
 
-    // hold
+    // unused amounts
     mapping(address => UnusedAmounts) public unused;
 
     /**
@@ -63,7 +62,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _amount0,
         uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
         unusedAmounts.amount0 = unusedAmounts.amount0.add(_amount0);
         unusedAmounts.amount1 = unusedAmounts.amount1.add(_amount1);
@@ -79,7 +78,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _amount0,
         uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
         unusedAmounts.amount0 = _amount0;
         unusedAmounts.amount1 = _amount1;
@@ -95,7 +94,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _amount0,
         uint256 _amount1
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
         if (unusedAmounts.amount0 > 0) {
             unusedAmounts.amount0 = unusedAmounts.amount0.sub(_amount0);
@@ -106,11 +105,12 @@ contract AggregatorManagement is AggregatorBase {
     }
 
     /**
-        @dev Gets unused (remaining) amounts
-        @param _strategy Address of the strategy
+     * @dev Gets unused (remaining) amounts
+     * @param _strategy Address of the strategy
      */
     function getUnusedAmounts(address _strategy)
         internal
+        view
         returns (uint256 amount0, uint256 amount1)
     {
         UnusedAmounts storage unusedAmounts = unused[_strategy];
@@ -137,52 +137,76 @@ contract AggregatorManagement is AggregatorBase {
         emit MintShare(_strategy, _to, _shares);
     }
 
+    function calculateShares(
+        address _pool,
+        address _strategy,
+        uint256 _amount0,
+        uint256 _amount1,
+        uint256 _totalAmount0,
+        uint256 _totalAmount1
+    ) internal returns (uint256 share) {
+        uint256 totalShares = totalShares[_strategy];
+        uint256 price = UniswapV3Oracle.consult(_pool, 60);
+
+        if (_totalAmount0 == 0) {
+            share = (_amount1.mul(price).add(_amount0)).div(1000);
+        } else if (_totalAmount1 == 0) {
+            share = (_amount0.mul(price).add(_amount1)).div(1000);
+        } else {
+            share = totalShares.mul(((_amount0).mul(price).add(_amount1))).div(
+                _totalAmount0.mul(price).add(_totalAmount1)
+            );
+        }
+    }
+
     /**
      * @notice Updates the shares of the user
      * @param _strategy Address of the strategy
      * @param _amount0 Amount of token0
      * @param _amount1 Amount of token1
-     * @param _liquidityBefore The liquidity before the user amounts are added
-     * @param _liquidityAfter Liquidity after user's liquidity is minted
+     * @param _totalAmount0 Total amount0 in the specific strategy
+     * @param _totalAmount1 Total amount1 in the specific strategy
      * @param _user address where shares should be issued
      */
     function issueShare(
         address _strategy,
         uint256 _amount0,
         uint256 _amount1,
-        uint128 _liquidityBefore,
-        uint128 _liquidityAfter,
+        uint256 _totalAmount0,
+        uint256 _totalAmount1,
         address _user
     ) internal returns (uint256 share) {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
+        IStrategy strategy = IStrategy(_strategy);
 
-        if (totalShares[_strategy] == 0) {
-            share = Math.max(_amount0, _amount1);
-        } else {
-            share = uint256(_liquidityAfter)
-                .sub(uint256(_liquidityBefore))
-                .mul(totalShares[_strategy])
-                .div(uint256(_liquidityBefore));
-        }
+        // // TODO: implement oracle here
+        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+
+        share = calculateShares(
+            address(pool),
+            _strategy,
+            _amount0,
+            _amount1,
+            _totalAmount0,
+            _totalAmount1
+        );
+
+        require(share > 0, "invalid shares");
 
         // strategy owner fees
-        if (strategy.fee() > 0) {
-            uint256 managerShare = share.mul(strategy.fee()).div(1e6);
+        if (strategy.feeTo() != address(0) && strategy.managementFee() > 0) {
+            uint256 managerShare = share.mul(strategy.managementFee()).div(1e8);
             mintShare(_strategy, managerShare, strategy.feeTo());
             share = share.sub(managerShare);
         }
 
         if (feeTo != address(0)) {
-            uint256 fee = share.mul(PROTOCOL_FEE).div(1e6);
-            share = share.sub(fee);
-            // issue fee
+            uint256 fee = share.mul(PROTOCOL_FEE).div(1e8);
             mintShare(_strategy, fee, feeTo);
-            // issue shares
-            mintShare(_strategy, share, _user);
-        } else {
-            // update shares w.r.t. strategy
-            mintShare(_strategy, share, _user);
+            share = share.sub(fee);
         }
+
+        // issue shares
+        mintShare(_strategy, share, _user);
     }
 
     /**
@@ -194,7 +218,7 @@ contract AggregatorManagement is AggregatorBase {
         address _strategy,
         uint256 _shares,
         address _user
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    ) internal {
         shares[_strategy][_user] = shares[_strategy][_user].sub(_shares);
         // update total shares
         totalShares[_strategy] = totalShares[_strategy].sub(_shares);
@@ -202,100 +226,113 @@ contract AggregatorManagement is AggregatorBase {
     }
 
     /**
-     * @dev Updates strategy data for future use
-     * @param _strategy Address of the strategy
-     * @param _amount0 Amount of token0
-     * @param _amount1 Amount of token1
-     * @param _secondaryAmount0 Amount0 placed in the limit order
-     * @param _secondaryAmount1 Amount1 placed in the limit order
+     * @dev Increase amounts in the current ticks
+     * @param _strategy The array of ticks
+     * @param _tickId The tick to update
+     * @param _amount0 Amount of token0 to be increased
+     * @param _amount1 Amount of token1 to be increased
      */
-    function updateStrategy(
+    function increaseUsedAmounts(
         address _strategy,
-        uint256 _amount0,
-        uint256 _amount1,
-        uint256 _secondaryAmount0,
-        uint256 _secondaryAmount1
-    ) internal {
-        IUnboundStrategy strategy = IUnboundStrategy(_strategy);
-        Strategy storage newStrategy = strategies[_strategy];
-        newStrategy.tickLower = strategy.tickLower();
-        newStrategy.tickUpper = strategy.tickUpper();
-        newStrategy.secondaryTickLower = strategy.secondaryTickLower();
-        newStrategy.secondaryTickUpper = strategy.secondaryTickUpper();
-        newStrategy.hold = strategy.hold();
-        newStrategy.amount0 = _amount0;
-        newStrategy.amount1 = _amount1;
-        newStrategy.secondaryAmount0 = _secondaryAmount0;
-        newStrategy.secondaryAmount1 = _secondaryAmount1;
-    }
-
-    /**
-     * @dev Increases total stored amounts for a specific strategy
-     * @param _strategy Address of the strategy
-     * @param _amount0 Amount of token0
-     * @param _amount1 Amount of token1
-     */
-    function increaseTotalAmounts(
-        address _strategy,
+        uint256 _tickId,
         uint256 _amount0,
         uint256 _amount1
     ) internal {
-        Strategy storage strategy = strategies[_strategy];
-        uint256 amount0 = strategy.amount0.add(_amount0);
-        uint256 amount1 = strategy.amount1.add(_amount1);
-        updateStrategy(
+        Strategy storage strategySnapshot = strategies[_strategy];
+        if (strategySnapshot.ticks.length == 0) {
+            updateUsedAmounts(_strategy, _tickId, _amount0, _amount1);
+        } else {
+            updateUsedAmounts(
+                _strategy,
+                _tickId,
+                strategySnapshot.ticks[_tickId].amount0.add(_amount0),
+                strategySnapshot.ticks[_tickId].amount1.add(_amount1)
+            );
+        }
+    }
+
+    /**
+     * @dev Updates used amounts
+     * @param _strategy Address of the strategy
+     * @param _tickId Index of the tick to update
+     * @param _amount0 Amount of token0
+     * @param _amount1 Amount of token1
+     */
+    function updateUsedAmounts(
+        address _strategy,
+        uint256 _tickId,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal {
+        Strategy storage strategySnapshot = strategies[_strategy];
+        IStrategy strategy = IStrategy(_strategy);
+
+        if (strategySnapshot.ticks.length == 0) {
+            // initiate an ticks array and push new tick data to it
+            strategySnapshot.ticks.push(
+                IStrategy.Tick(
+                    _amount0,
+                    _amount1,
+                    strategy.ticks(_tickId).tickLower,
+                    strategy.ticks(_tickId).tickUpper
+                )
+            );
+        } else {
+            // updated specific tick data
+            IStrategy.Tick storage newTick = strategySnapshot.ticks[_tickId];
+            newTick.tickLower = strategy.ticks(_tickId).tickLower;
+            newTick.tickUpper = strategy.ticks(_tickId).tickUpper;
+            newTick.amount0 = _amount0;
+            newTick.amount1 = _amount1;
+        }
+    }
+
+    /**
+     * @dev Decrease amounts in the current ticks
+     * @param _strategy Address of strategy
+     * @param _tickId Id of the tick to update
+     * @param _amount0 Amount of token0 to be increased
+     * @param _amount1 Amount of token1 to be increased
+     */
+    function decreaseUsedAmounts(
+        address _strategy,
+        uint256 _tickId,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal {
+        Strategy storage strategySnapshot = strategies[_strategy];
+        updateUsedAmounts(
             _strategy,
-            amount0,
-            amount1,
-            strategy.secondaryAmount0,
-            strategy.secondaryAmount1
+            _tickId,
+            strategySnapshot.ticks[_tickId].amount0.sub(_amount0),
+            strategySnapshot.ticks[_tickId].amount1.sub(_amount1)
         );
     }
 
     /**
-     * @dev Decreases total stored amounts for a specific strategy
-     * @param _strategy Address of the strategy
-     * @param _amount0 Amount of token0
-     * @param _amount1 Amount of token1
+     * @notice Gets assets under management for specific strategy
+     * @param _strategy Address of the strategy contract
      */
-    function decreaseTotalAmounts(
-        address _strategy,
-        uint256 _amount0,
-        uint256 _amount1
-    ) internal {
-        Strategy storage strategy = strategies[_strategy];
-        uint256 amount0 = strategy.amount0.sub(_amount0);
-        uint256 amount1 = strategy.amount1.sub(_amount1);
-        updateStrategy(
-            _strategy,
-            amount0,
-            amount1,
-            strategy.secondaryAmount0,
-            strategy.secondaryAmount1
-        );
-    }
+    function getAUM(address _strategy)
+        public
+        view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        Strategy memory strategy = strategies[_strategy];
+        UnusedAmounts memory unusedAmounts = unused[_strategy];
 
-    function decreaseAmounts(
-        address _strategy,
-        uint256 _primaryAmount0,
-        uint256 _primaryAmount1,
-        uint256 _secondaryAmount0,
-        uint256 _secondaryAmount1
-    ) internal {
-        Strategy storage strategy = strategies[_strategy];
+        uint256 totalAmount0;
+        uint256 totalAmount1;
 
-        uint256 amount0 = strategy.amount0.sub(_primaryAmount0);
-        uint256 amount1 = strategy.amount1.sub(_primaryAmount1);
-        uint256 secondaryAmount0 =
-            strategy.secondaryAmount0.sub(_secondaryAmount0);
-        uint256 secondaryAmount1 =
-            strategy.secondaryAmount1.sub(_secondaryAmount1);
-        updateStrategy(
-            _strategy,
-            amount0,
-            amount1,
-            secondaryAmount0,
-            secondaryAmount1
-        );
+        // add amounts from different ranges
+        for (uint256 i = 0; i < strategy.ticks.length; i++) {
+            IStrategy.Tick memory tick = strategy.ticks[i];
+            totalAmount0 = totalAmount0.add(tick.amount0);
+            totalAmount1 = totalAmount1.add(tick.amount1);
+        }
+
+        // add unused amounts
+        amount0 = totalAmount0.add(unusedAmounts.amount0);
+        amount1 = totalAmount1.add(unusedAmounts.amount1);
     }
 }
