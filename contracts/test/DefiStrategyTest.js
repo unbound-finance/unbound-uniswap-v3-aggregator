@@ -1,10 +1,12 @@
 const {expect} = require('chai');
 
 describe ('DefiEdgeStrategy Contract Test Variables', async function () {
-    let DefiEdgeStrategy , _pool, _operator ,tickLow, tickHigh, _pendingOperator, _aggregator, deployFunction,_swapAmount,sqrtPriceLimittX96,zeroToOne,allowPriceSlipage, managementFee,_newFeeTo,testAddress,initialized,onHold,lengthOfData;
+    let DefiEdgeStrategy ,StrategyFactory,strategy, Aggregator, aggredeploy,_pool, _operator ,tickLow, tickHigh, _pendingOperator, _aggregator, deployFunction,_swapAmount,sqrtPriceLimittX96,zeroToOne,allowPriceSlipage, managementFee,_newFeeTo,testAddress,initialized,onHold,lengthOfData,strat0,strat1;
     beforeEach(async function () {
         DefiEdgeStrategy = await ethers.getContractFactory('DefiEdgeStrategy');
-        [_pool,_operator,_pendingOperator,_newFeeTo,testAddress,_aggregator,deployFunction,_swapAmount,sqrtPriceLimittX96,zeroToOne,allowPriceSlipage,managementFee,initialized,onHold,lengthOfData] = await ethers.getSigners();
+        Aggregator = await ethers.getContractFactory('Aggregator');
+        StrategyFactory = await ethers.getContractFactory('StrategyFactory');
+        [_pool,_operator,strategy,_pendingOperator,_newFeeTo,testAddress,_aggregator,deployFunction,_swapAmount,sqrtPriceLimittX96,zeroToOne,allowPriceSlipage,managementFee,initialized,onHold,lengthOfData] = await ethers.getSigners();
         deployFunction = await DefiEdgeStrategy.deploy(_aggregator.address,_pool.address,_operator.address);
     });
 
@@ -201,14 +203,43 @@ describe ('DefiEdgeStrategy Contract Test Variables', async function () {
     //  });
     describe ('rebalance', async function () {
         it('deploying rebalance function', async function () {
-            tickLow = calculateTick(2700,60);
-            tickHigh = calculateTick(3300,60);
-
             await deployFunction.connect(_operator).initialize([[0,0,tickLow,tickHigh]]);
-            await deployFunction.connect(_operator).rebalance(2**256-1,2**160-1,2**256-1,true,[[0,0,79020,81660]]);
-            console.log('connection established');
+            await deployFunction.connect(_operator).rebalance('0',0,'1000000',true,[['100000000000000000','35000000000000000000', calculateTick(2600, 60), calculateTick(2800, 60),],]);
+            expect(await  deployFunction.zeroToOne())
+                .is
+                .equal(
+                    true
+                );
+            expect(await  deployFunction.swapAmount())
+                .is
+                .equal(
+                    0
+                );
+            expect(await  deployFunction.sqrtPriceLimitX96())
+                .is
+                .equal(
+                    0
+                );
+            expect(await  deployFunction.allowedPriceSlippage())
+                .is
+                .equal(
+                    1000000
+                );
+            expect(await  deployFunction.onHold())
+                .is
+                .equal(
+                    false
+                );
+        });
+        it ('ChnageTicks', async function () {
+            await deployFunction.changeTicks([['100000000000000000','35000000000000000000', calculateTick(2600, 60), calculateTick(2800, 60),],]);
+            console.log(await  deployFunction.tickLower());
+            console.log(await  deployFunction.tickUpper());
+            console.log(await  deployFunction.ticks[1]);
+
+
         })
-    })
+    });
 });
 function calculateTick(price, tickSpacing) {
     const logTick = 46054 * Math.log10(Math.sqrt(price));
