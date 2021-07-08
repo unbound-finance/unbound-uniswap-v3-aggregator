@@ -21,6 +21,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/SafeCast.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
+import "hardhat/console.sol";
+
 contract Aggregator is UniswapPoolActions {
     using SafeMath for uint256;
     using SafeCast for uint256;
@@ -117,6 +119,10 @@ contract Aggregator is UniswapPoolActions {
             "Aggregator: Slippage"
         );
 
+        console.log("liquidity added");
+        console.log(amount0);
+        console.log(amount1);
+
         // increase used amounts 
         increaseUsedAmounts(_strategy, 0, amount0, amount1);
 
@@ -162,6 +168,10 @@ contract Aggregator is UniswapPoolActions {
                     amount0,
                     amount1
                 );
+
+                console.log("remove amounts");
+                console.log(amount0);
+                console.log(amount1);
 
                 // decrease used amounts for each tick
                 decreaseUsedAmounts(_strategy, i, amount0, amount1);

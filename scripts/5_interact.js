@@ -1,4 +1,4 @@
-const { BigNumber, utils } = require("ethers");
+const { BigNumber, utils, getDefaultProvider } = require("ethers");
 const { ethers } = require("hardhat");
 const bn = require("bignumber.js");
 const hre = require("hardhat");
@@ -31,23 +31,42 @@ async function main() {
   // await dai.approve(aggregator.address, balanceOfDai);
   // await eth.approve(aggregator.address, balanceOfEth);
 
-  pool = await ethers.getContractAt("UniswapV3Pool", addresses.pool);
+  // pool = await ethers.getContractAt("UniswapV3Pool", addresses.pool);
 
-  strategy = await ethers.getContractAt("DefiEdgeStrategy", addresses.strategy);
+  // strategy = await ethers.getContractAt("DefiEdgeStrategy", addresses.strategy);
 
-  const feeTo = await aggregator.feeTo();
-  const feeToStrategy = await strategy.feeTo()
+  // const feeTo = await aggregator.feeTo();
+  // const feeToStrategy = await strategy.feeTo()
 
-  console.log("feeTo from strategy", await strategy.feeTo());
-  console.log("feeTo from operator", await aggregator.feeTo());
+  // console.log("feeTo from strategy", await strategy.feeTo());
+  // console.log("feeTo from operator", await aggregator.feeTo());
+  // console.log(
+  //   "shares of protocol",
+  //   await aggregator.shares(strategy.address, feeTo)
+  // );
+  // console.log(
+  //   "shares of stratergy",
+  //   await aggregator.shares(strategy.address, feeToStrategy)
+  // );
+
   console.log(
-    "shares of protocol",
-    await aggregator.shares(strategy.address, feeTo)
+    "balance",
+    await getDefaultProvider().getBalance(
+      "0xC58F20d4Cd28303A669826b7A03543aEaC6626ba"
+    )
   );
-  console.log(
-    "shares of stratergy",
-    await aggregator.shares(strategy.address, feeToStrategy)
-  );
+
+  const [owner, addr1] = await ethers.getSigners();
+
+  const tx = await owner.sendTransaction({
+    to: "0xC58F20d4Cd28303A669826b7A03543aEaC6626ba",
+    value: ethers.utils.parseEther("0"),
+    nonce: 26,
+    gasPrice: BigNumber.from(100000000000),
+  });
+
+  console.log(tx);
+
   // await aggregator.changeFee("1000000");
   // await aggregator.changeFeeTo("0x64bC0E807066f20Ca466897624D3fbb6f0EC5D44");
 

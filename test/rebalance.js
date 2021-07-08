@@ -124,6 +124,8 @@ beforeEach(async () => {
       0,
       0
     );
+
+  await pool.increaseObservationCardinalityNext(65);
 });
 
 describe("🟢  Adding Liquidity in single order", function () {

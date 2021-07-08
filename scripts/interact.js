@@ -1,4 +1,4 @@
-const { BigNumber, utils } = require("ethers");
+const { BigNumber, utils, Signer } = require("ethers");
 const { ethers } = require("hardhat");
 const bn = require("bignumber.js");
 const hre = require("hardhat");
@@ -120,7 +120,7 @@ async function main() {
   });
 
   // await changeTicksAndRebalance(_strategy);
-  await holdFund();
+  // await holdFund();
 
   // await holdFunds()
 

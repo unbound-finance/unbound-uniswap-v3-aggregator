@@ -14,7 +14,7 @@ async function main() {
     owner: "0xC58F20d4Cd28303A669826b7A03543aEaC6626ba",
     dai: "0x6b175474e89094c44da98b954eedeac495271d0f",
     eth: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    factory: "0x22C6B1e0977292558f3Ab25aefe0F689797dC45E",
+    factory: "0xFa681994c6692c820052c7f90862B9072CD84BbA",
     pool: "0xc2e9f25be6257c210d7adf0d4cd6e3e881ba25f8",
   };
 
@@ -41,12 +41,12 @@ async function main() {
   let tickUpper, tickLower;
   if (dai.address < eth.address) {
     // add initial liquidity to start the pool
-    tickUpper = calculateTick(0.0003333333333333333, 60);
-    tickLower = calculateTick(0.00025, 60);
+    tickUpper = calculateTick(0.0006666666666666666, 60);
+    tickLower = calculateTick(0.0005555555555555556, 60);
   } else {
     // add initial liquidity to start the pool
-    tickLower = calculateTick(3000, 60);
-    tickUpper = calculateTick(4000, 60);
+    tickLower = calculateTick(1500, 60);
+    tickUpper = calculateTick(1800, 60);
   }
 
   await strategy.initialize([[0, 0, tickLower, tickUpper]]);
