@@ -4,7 +4,6 @@ pragma abicoder v2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 
@@ -13,20 +12,14 @@ import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 // import libraries
 import "../libraries/LiquidityHelper.sol";
 
-// import DefiEdge interfaces
-import "../interfaces/IStrategy.sol";
-
-import "../base/AggregatorManagement.sol";
+import "../base/StrategyBase.sol";
 
 contract UniswapPoolActions is
-    AggregatorManagement,
+    StrategyBase,
     IUniswapV3MintCallback,
     IUniswapV3SwapCallback
 {
     using SafeMath for uint256;
-
-    // used as temporary variable to verify the pool
-    address pool_;
 
     event FeesClaimed(
         address indexed strategy,
@@ -46,7 +39,6 @@ contract UniswapPoolActions is
 
     /**
      * @notice Mints liquidity from V3 Pool
-     * @param _pool Address of the pool
      * @param _tickLower Lower tick
      * @param _tickUpper Upper tick
      * @param _amount0 Amount of token0
@@ -54,15 +46,12 @@ contract UniswapPoolActions is
      * @param _payer Address which is adding the liquidity
      */
     function mintLiquidity(
-        address _pool,
         int24 _tickLower,
         int24 _tickUpper,
         uint256 _amount0,
         uint256 _amount1,
         address _payer
     ) internal returns (uint256 amount0, uint256 amount1) {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-
         uint128 liquidity = LiquidityHelper.getLiquidityForAmounts(
             address(pool),
             _tickLower,
@@ -71,8 +60,6 @@ contract UniswapPoolActions is
             _amount1
         );
 
-        // set temparary variable for callback verification
-        pool_ = _pool;
         // add liquidity to Uniswap pool
         (amount0, amount1) = pool.mint(
             address(this),
@@ -85,16 +72,12 @@ contract UniswapPoolActions is
 
     /**
      * @notice Burns liquidity in the given range
-     * @param _pool Address of the pool
-     * @param _strategy Address of the strategy
      * @param _tickLower Lower Tick
      * @param _tickUpper Upper Tick
      * @param _amount0 Amount 0 to burn
      * @param _amount1 Amount to burn
      */
     function burnLiquidity(
-        address _pool,
-        address _strategy,
         int24 _tickLower,
         int24 _tickUpper,
         uint256 _amount0,
@@ -109,14 +92,12 @@ contract UniswapPoolActions is
     {
         // calculate current liquidity
         liquidity = LiquidityHelper.getLiquidityForAmounts(
-            _pool,
+            address(pool),
             _tickLower,
             _tickUpper,
             _amount0 > 100 ? _amount0.sub(100) : _amount0,
             _amount1 > 100 ? _amount1.sub(100) : _amount1
         );
-
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         uint256 tokensBurned0;
         uint256 tokensBurned1;
@@ -144,7 +125,7 @@ contract UniswapPoolActions is
         );
 
         emit FeesClaimed(
-            _strategy,
+            msg.sender,
             collect0 > tokensBurned0 ? uint256(collect0).sub(tokensBurned0) : 0,
             collect1 > tokensBurned1 ? uint256(collect1).sub(tokensBurned1) : 0
         );
@@ -152,9 +133,9 @@ contract UniswapPoolActions is
 
     /**
      * @notice Burns all the liquidity and collects fees
-     * @param _strategy Address of the strategy
+     * @param _ticks Array of the ticks
      */
-    function burnAllLiquidity(address _strategy)
+    function burnAllLiquidity(Tick[] memory _ticks)
         internal
         returns (
             uint256 collect0,
@@ -162,12 +143,8 @@ contract UniswapPoolActions is
             uint128 liquidity
         )
     {
-        IStrategy strategy = IStrategy(_strategy);
-        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
-        Strategy storage strategySnapshot = strategies[_strategy];
-
-        for (uint256 i = 0; i < strategySnapshot.ticks.length; i++) {
-            IStrategy.Tick memory tick = strategySnapshot.ticks[i];
+        for (uint256 i = 0; i < ticks.length; i++) {
+            Tick memory tick = _ticks[i];
 
             // Burn liquidity for range order
             (
@@ -175,8 +152,6 @@ contract UniswapPoolActions is
                 uint256 amount1,
                 uint128 burnedLiquidity
             ) = burnLiquidity(
-                address(pool),
-                address(strategy),
                 tick.tickLower,
                 tick.tickUpper,
                 tick.amount0,
@@ -189,61 +164,6 @@ contract UniswapPoolActions is
         }
     }
 
-    // swaps with exact input single functionality
-    function swap(
-        address _pool,
-        address _strategy,
-        bool _zeroToOne,
-        int256 _amount,
-        uint160 _sqrtPriceLimitX96
-    ) internal returns (uint256 amountOut) {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        IStrategy strategy = IStrategy(_strategy);
-
-        (amountOut) = swapExactInput(
-            _pool,
-            _zeroToOne,
-            _amount,
-            _sqrtPriceLimitX96
-        );
-
-        (uint160 newSqrtRatioX96, , , , , , ) = pool.slot0();
-
-        uint160 difference = sqrtRatioX96 < newSqrtRatioX96
-            ? sqrtRatioX96 / newSqrtRatioX96
-            : newSqrtRatioX96 / sqrtRatioX96;
-
-        if (strategy.allowedPriceSlippage() > 0) {
-            // check price P slippage
-            require(
-                uint256(difference) <= strategy.allowedPriceSlippage().div(1e8)
-            );
-        }
-    }
-
-    function swapExactInput(
-        address _pool,
-        bool _zeroToOne,
-        int256 _amount,
-        uint160 sqrtPriceLimitX96
-    ) internal returns (uint256 amountOut) {
-        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
-
-        // set temparary variable for callback verification
-        pool_ = _pool;
-
-        (int256 amount0, int256 amount1) = pool.swap(
-            address(this),
-            _zeroToOne,
-            _amount,
-            sqrtPriceLimitX96,
-            abi.encode(SwapCallbackData({pool: _pool, zeroToOne: _zeroToOne}))
-        );
-
-        return uint256(-(_zeroToOne ? amount1 : amount0));
-    }
-
     /**
      * @dev Callback for Uniswap V3 pool.
      */
@@ -254,9 +174,7 @@ contract UniswapPoolActions is
     ) external override {
         SwapCallbackData memory decoded = abi.decode(data, (SwapCallbackData));
         // check if the callback is received from Uniswap V3 Pool
-        require(msg.sender == pool_);
-        IUniswapV3Pool pool = IUniswapV3Pool(pool_);
-        delete pool_;
+        require(msg.sender == address(pool));
 
         if (decoded.zeroToOne) {
             TransferHelper.safeTransfer(
@@ -273,6 +191,47 @@ contract UniswapPoolActions is
         }
     }
 
+    // swaps with exact input single functionality
+    function swap(
+        bool _zeroToOne,
+        int256 _amount,
+        uint256 _allowedPriceSlippage,
+        uint160 _sqrtPriceLimitX96
+    ) internal returns (uint256 amountOut) {
+        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+
+        (amountOut) = swapExactInput(_zeroToOne, _amount, _sqrtPriceLimitX96);
+
+        (uint160 newSqrtRatioX96, , , , , , ) = pool.slot0();
+
+        uint160 difference = sqrtRatioX96 < newSqrtRatioX96
+            ? sqrtRatioX96 / newSqrtRatioX96
+            : newSqrtRatioX96 / sqrtRatioX96;
+
+        if (_allowedPriceSlippage > 0) {
+            // check price P slippage
+            require(uint256(difference) <= _allowedPriceSlippage.div(1e8));
+        }
+    }
+
+    function swapExactInput(
+        bool _zeroToOne,
+        int256 _amount,
+        uint160 sqrtPriceLimitX96
+    ) internal returns (uint256 amountOut) {
+        (int256 amount0, int256 amount1) = pool.swap(
+            address(this),
+            _zeroToOne,
+            _amount,
+            sqrtPriceLimitX96,
+            abi.encode(
+                SwapCallbackData({pool: address(pool), zeroToOne: _zeroToOne})
+            )
+        );
+
+        return uint256(-(_zeroToOne ? amount1 : amount0));
+    }
+
     /**
      * @dev Callback for Uniswap V3 pool.
      */
@@ -284,9 +243,7 @@ contract UniswapPoolActions is
         MintCallbackData memory decoded = abi.decode(data, (MintCallbackData));
 
         // check if the callback is received from Uniswap V3 Pool
-        require(msg.sender == pool_);
-        IUniswapV3Pool pool = IUniswapV3Pool(pool_);
-        delete pool_;
+        require(msg.sender == address(pool));
 
         if (decoded.payer == address(this)) {
             // transfer tokens already in the contract
@@ -317,23 +274,17 @@ contract UniswapPoolActions is
         }
     }
 
-    /**
-     * @notice Get all assets under management for specific strategy
-     * @param _strategy Address of the strategy
-     */
-    function getAUMWithFees(address _strategy)
+    function getAUMWithFees()
         internal
         returns (uint256 amount0, uint256 amount1)
     {
-        IStrategy strategy = IStrategy(_strategy);
-        IUniswapV3Pool pool = IUniswapV3Pool(strategy.pool());
+        // get balances of amount0 and amount1
+        amount0 = IERC20(pool.token0()).balanceOf(msg.sender);
+        amount1 = IERC20(pool.token1()).balanceOf(msg.sender);
 
-        (amount0, amount1) = getAUM(_strategy);
-
-        for (uint256 i = 0; i < strategy.tickLength(); i++) {
-            IStrategy.Tick memory tick = strategy.ticks(i);
-
-            uint128 fees;
+        // get fees accumulated in each tick
+        for (uint256 i = 0; i < ticks.length; i++) {
+            Tick memory tick = ticks[i];
 
             (uint128 currentLiquidity, , , , ) = pool.positions(
                 PositionKey.compute(

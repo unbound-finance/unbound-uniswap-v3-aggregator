@@ -8,44 +8,18 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
+import "./base/UniswapPoolActions.sol";
+import "./base/StrategyBase.sol";
+
 import "hardhat/console.sol";
 
-interface IAggregator {
-    function rebalance(address _strategy) external;
-
-    function getAUM(address _strategy) external returns (uint256, uint256);
-}
-
-contract DefiEdgeStrategy {
+contract DefiEdgeStrategy is UniswapPoolActions {
     using SafeMath for uint256;
 
-    address public immutable pool;
+    // events
+    event Mint(uint256 amount0, uint256 amount1);
 
-    uint256 public managementFee = 0;
-    address public feeTo;
-
-    bool public initialized;
-
-    bool public onHold;
-
-    address public operator;
-    address pendingOperator;
-    address public aggregator;
-
-    uint256 public swapAmount;
-    uint160 public sqrtPriceLimitX96;
-    bool public zeroToOne;
-
-    uint256 public allowedPriceSlippage;
-
-    struct Tick {
-        uint256 amount0;
-        uint256 amount1;
-        int24 tickLower;
-        int24 tickUpper;
-    }
-
-    Tick[] public ticks;
+    event Burn(uint256 amount0, uint256 amount1);
 
     constructor(
         address _aggregator,
@@ -53,76 +27,156 @@ contract DefiEdgeStrategy {
         address _operator
     ) {
         aggregator = _aggregator;
-        pool = _pool;
+        pool = IUniswapV3Pool(_pool);
         operator = _operator;
         managementFee = 0;
     }
 
-    // Modifiers
-    modifier onlyOperator() {
-        require(msg.sender == operator, "Ownable: caller is not the operator");
-        _;
+    function mint(
+        uint256 _amount0,
+        uint256 _amount1,
+        uint256 _amount0Min,
+        uint256 _amount1Min,
+        uint256 _minShare
+    )
+        external
+        returns (
+            uint256 amount0,
+            uint256 amount1,
+            uint256 share
+        )
+    {
+        // check if strategy has been initialised
+        require(initialized, "uninitialised strategy");
+
+        // index 0 will always be an primary tick
+        (amount0, amount1) = mintLiquidity(
+            ticks[0].tickLower,
+            ticks[0].tickUpper,
+            _amount0,
+            _amount1,
+            msg.sender
+        );
+
+        // get total amounts with fees
+        (uint256 totalAmount0, uint256 totalAmount1) = getAUMWithFees();
+
+        // issue share based on the liquidity added
+        share = issueShare(
+            amount0,
+            amount1,
+            totalAmount0,
+            totalAmount1,
+            msg.sender
+        );
+
+        // update data in the tick
+        ticks[0].amount0 = ticks[0].amount0.add(amount0);
+        ticks[0].amount1 = ticks[0].amount1.add(amount1);
+
+        // prevent front running of strategy fee
+        require(share >= _minShare, "minimum share check failed");
+
+        // price slippage check
+        require(
+            amount0 >= _amount0Min && amount1 >= _amount1Min,
+            "Aggregator: Slippage"
+        );
+
+        emit Mint(amount0, amount1);
     }
 
-    // Modifiers
-    modifier whenInitialized() {
-        require(initialized, "Ownable: strategy not initialized");
-        _;
-    }
+    function burn(
+        uint256 _shares,
+        uint256 _amount0Min,
+        uint256 _amount1Min
+    ) external returns (uint256 amount0, uint256 amount1) {
+        // check if the user has sufficient shares
+        require(
+            balanceOf(msg.sender) >= _shares,
+            "insufficient shares"
+        );
 
-    //Not required as on 64 line we are using onlyOperator modifier as veryfying
-    // Checks if sender is operator
-    // function isOperator() internal view returns (bool) {
-    //     return msg.sender == operator;
-    // }
+        uint256 collect0;
+        uint256 collect1;
 
-    /**
-     * @dev Replaces old ticks with new ticks
-     * @param _ticks New ticks
-     */
-    function changeTicks(Tick[] memory _ticks) internal {
-        // deletes ticks array
-        delete ticks;
+        // burn liquidity based on shares from existing ticks
+        if (ticks.length != 0) {
+            for (uint256 i = 0; i < ticks.length; i++) {
+                Tick memory tick = ticks[i];
 
-        for (uint256 i = 0; i < _ticks.length; i++) {
-            int24 tickLower = _ticks[i].tickLower;
-            int24 tickUpper = _ticks[i].tickUpper;
+                // get amounts to be burned based on shares
+                amount0 = tick
+                .amount0
+                .mul(balanceOf(msg.sender))
+                .div(totalSupply());
 
-            // check that two tick upper and tick lowers are not in array cannot be same
-            for (uint256 j = 0; j < _ticks.length; j++) {
-                if (i != j) {
-                    if (tickLower == _ticks[j].tickLower) {
-                        require(
-                            tickUpper != _ticks[j].tickUpper,
-                            "ticks cannot be same"
-                        );
-                    }
-                }
+                amount1 = tick
+                .amount1
+                .mul(balanceOf(msg.sender))
+                .div(totalSupply());
+
+                // burn liquidity and collect fees
+                (amount0, amount1, ) = burnLiquidity(
+                    tick.tickLower,
+                    tick.tickUpper,
+                    amount0,
+                    amount1
+                );
+
+                // get deployed amounts
+                amount0 = tick.amount0 > amount0
+                    ? tick.amount0.sub(amount0)
+                    : amount0;
+
+                amount1 = tick.amount1 > amount1
+                    ? tick.amount1.sub(amount1)
+                    : amount1;
+
+                // update data in the tick
+                tick.amount0 = amount0;
+                tick.amount1 = amount1;
+
+                // add to total amounts
+                collect0 = collect0.add(amount0);
+                collect1 = collect1.add(amount1);
             }
-
-            // push to the ticks array
-            ticks.push(
-                Tick(
-                    _ticks[i].amount0,
-                    _ticks[i].amount1,
-                    _ticks[i].tickLower,
-                    _ticks[i].tickUpper
-                )
-            );
         }
-    }
 
-    /**
-     * @notice Initialised the strategy, can be done only once
-     * @param _ticks new ticks in the form of Tick struct
-     */
-    function initialize(Tick[] memory _ticks) external onlyOperator {
-        require(!initialized, "strategy already initialised");
-        IUniswapV3Pool currentPool = IUniswapV3Pool(pool);
-        initialized = true;
-        for (uint256 i = 0; i < _ticks.length; i++) {
-            ticks.push(Tick(0, 0, _ticks[i].tickLower, _ticks[i].tickUpper));
+        // give from unused amounts
+        amount0 = IERC20(pool.token0()).balanceOf(msg.sender);
+        amount1 = IERC20(pool.token1()).balanceOf(msg.sender);
+
+        if (amount0 > 0) {
+            amount0 = amount0.mul(balanceOf(msg.sender)).div(totalSupply());
         }
+
+        if (amount1 > 0) {
+            amount1 = amount1.mul(balanceOf(msg.sender)).div(totalSupply());
+        }
+
+        // add to total amounts
+        amount0 = collect0.add(amount0);
+        amount1 = collect1.add(amount1);
+
+        // check slippage
+        require(
+            _amount0Min <= amount0 && _amount1Min <= amount1,
+            "Aggregator: Slippage"
+        );
+
+        // burn shares
+        burnShare(msg.sender, _shares);
+
+        // transfer tokens
+        if (amount0 > 0) {
+            TransferHelper.safeTransfer(pool.token0(), msg.sender, amount0);
+        }
+        if (amount1 > 0) {
+            TransferHelper.safeTransfer(pool.token1(), msg.sender, amount1);
+        }
+
+        emit Burn(amount0, amount1);
     }
 
     /**
@@ -137,14 +191,63 @@ contract DefiEdgeStrategy {
         uint256 _allowedPriceSlippage,
         bool _zeroToOne,
         Tick[] memory _ticks
-    ) external onlyOperator whenInitialized {
-        zeroToOne = _zeroToOne;
-        swapAmount = _swapAmount;
-        sqrtPriceLimitX96 = _sqrtPriceLimitX96;
-        allowedPriceSlippage = _allowedPriceSlippage;
-        onHold = false;
-        changeTicks(_ticks);
-        IAggregator(aggregator).rebalance(address(this));
+    ) external onlyOperator whenInitialized validTicks(_ticks) {
+        if (onHold) {
+            // set onHold to false
+            onHold = false;
+            // deploy between ticks
+            redeploy(_ticks);
+        } else if (_swapAmount > 0) {
+            // set unhold to false
+            onHold = false;
+
+            // burn all liquidity
+            burnAllLiquidity(ticks);
+
+            uint256 amountOut;
+
+            // swap tokens
+            (amountOut) = swap(
+                _zeroToOne,
+                int256(_swapAmount),
+                _allowedPriceSlippage,
+                _sqrtPriceLimitX96
+            );
+
+            // redeploy using ticks
+            redeploy(_ticks);
+        } else {
+            // set hold true
+            onHold = false;
+
+            // burn all liquidity
+            burnAllLiquidity(ticks);
+
+            // redeploy to the amounts specified
+            redeploy(_ticks);
+        }
+    }
+
+    function redeploy(Tick[] memory _ticks) internal {
+        // delete ticks
+        delete ticks;
+
+        // redeploy the liquidity
+        for (uint256 i = 0; i < _ticks.length; i++) {
+            Tick memory tick = _ticks[i];
+
+            // mint liquidity
+            (uint256 amount0, uint256 amount1) = mintLiquidity(
+                tick.tickLower,
+                tick.tickUpper,
+                tick.amount0,
+                tick.amount1,
+                address(this)
+            );
+
+            // push to ticks array
+            ticks.push(Tick(amount0, amount1, tick.tickLower, tick.tickUpper));
+        }
     }
 
     /**
@@ -152,56 +255,23 @@ contract DefiEdgeStrategy {
      */
     function hold() external onlyOperator whenInitialized {
         onHold = true;
+        burnAllLiquidity(ticks);
         delete ticks;
-        swapAmount = 0;
-        sqrtPriceLimitX96 = 0;
-        allowedPriceSlippage = 0;
-        IAggregator(aggregator).rebalance(address(this));
     }
 
     /**
-     * @notice Changes the fee
-     * @param _tier Fee tier from indexes 0 to 2
+     * @notice Initialised the strategy, can be done only once
+     * @param _ticks new ticks in the form of Tick struct
      */
-    function changeFee(uint256 _tier) public onlyOperator {
-        if (_tier == 2) {
-            managementFee = 5000000; // 5%
-        } else if (_tier == 1) {
-            managementFee = 2000000; // 2%
-        } else {
-            managementFee = 1000000; // 1%
+    function initialize(Tick[] memory _ticks)
+        external
+        onlyOperator
+        validTicks(_ticks)
+    {
+        require(!initialized, "strategy already initialised");
+        initialized = true;
+        for (uint256 i = 0; i < _ticks.length; i++) {
+            ticks.push(Tick(0, 0, _ticks[i].tickLower, _ticks[i].tickUpper));
         }
-    }
-
-    /**
-     * @notice changes address where the operator is receiving the fee
-     * @param _newFeeTo New address where fees should be received
-     */
-    function changeFeeTo(address _newFeeTo) external onlyOperator {
-        feeTo = _newFeeTo;
-    }
-
-    /**
-     * @notice Change the operator
-     * @param _operator Address of the new operator
-     */
-    function changeOperator(address _operator) external onlyOperator {
-        require(_operator != address(0), "invalid operator");
-        pendingOperator = _operator;
-    }
-
-    /**
-     * @notice Change the operator
-     */
-    function acceptOperator() external {
-        require(msg.sender == pendingOperator, "invalid match");
-        operator = pendingOperator;
-    }
-
-    /**
-     * @notice Returns lengths of the ticks
-     */
-    function tickLength() public view returns (uint256 length) {
-        length = ticks.length;
     }
 }

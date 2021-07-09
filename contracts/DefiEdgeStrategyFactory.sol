@@ -6,7 +6,7 @@ pragma abicoder v2;
 import "./DefiEdgeStrategy.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-contract StrategyFactory {
+contract DefiEdgeStrategyFactory {
     using SafeMath for uint256;
 
     event NewStrategy(address indexed strategy, address indexed creater);
@@ -21,6 +21,18 @@ contract StrategyFactory {
 
     // total number of strategies
     uint256 public total;
+
+    // governance address
+    address public governance;
+    
+    // Modifiers
+    modifier onlyOperator() {
+        require(
+            msg.sender == operator,
+            "Ownable: caller is not the governance"
+        );
+        _;
+    }
 
     constructor(address _aggregator) {
         aggregator = _aggregator;
